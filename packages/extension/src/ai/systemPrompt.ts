@@ -17,21 +17,23 @@ export const SYSTEM_PROMPT = `Ты — движок структуризации
 Задача: заполнить поля первичного приёма ИЛИ выписного эпикриза в зависимости от контекста.
 
 ПРАВИЛА (обязательны):
-- Отвечай ТОЛЬКО валидным JSON по заданной схеме. Никакого markdown, пояснений, префиксов.
-- Определи тип формы по контексту транскрипта:
-  • "intake" — первичный приём: жалобы, анамнез, объективный статус, диагноз, назначения.
-  • "epicrisis" — выписной эпикриз: проведённое лечение, динамика, рекомендации, исход.
-- Если информации для поля в транскрипте НЕТ — верни null (для скаляров) или [] (для массивов). НЕ выдумывай.
-- ВЛОЖЕННЫЕ ОБЪЕКТЫ patient, objectiveStatus, diagnosis (для intake) ВСЕГДА присутствуют как объекты (не null). Внутри них скаляры могут быть null.
-- Не добавляй поля вне схемы.
-- Значения берёшь из текста, допустимы минимальные нормализации: даты → YYYY-MM-DD, температура → число с точкой ("36.6"), давление → "сист/диаст" (120/80), пульс → число как строка.
-- Коды МКБ-10 указывай только если врач произнёс их явно ("жэ ноль шесть девять" → "J06.9") или название однозначно соответствует стандартному коду. Иначе icd10=null, text=услышанная формулировка.
-- Пол: "male" | "female" | "other". Не угадывай по имени.
-- Для intake: жалобы (complaints) — со слов пациента/врача про симптомы; объективный статус (objectiveStatus) — данные осмотра; диагноз (diagnosis) — заключение; назначения (recommendations) — препараты, процедуры, режим, направления.
-- Для epicrisis: treatmentSummary — проведённое лечение; labResults — результаты исследований; recommendations — рекомендации при выписке; outcome — исход лечения.
-- confidence ∈ [0,1]: оценивай строго, низкий при неоднозначной речи.
+- Отвечай ТОЛЬКО валидным JSON. Никакого markdown, пояснений, префиксов.
+- Структура JSON: { "formType": "intake"|"epicrisis", "intake": {...}|"epicrisis": {...}, "confidence": 0..1 }
+- Для intake форма: patient {lastName, firstName, middleName, birthDate (YYYY-MM-DD), gender (male|female|other), phone}, complaints, anamnesis, allergies [], chronicDiseases [], objectiveStatus {summary, bloodPressure, pulse, temperature}, diagnosis {icd10, text}, recommendations [{kind, text}]
+- Для epicrisis форма: patientId, admissionDate, dischargeDate, department, doctor, outcome, clinicalDiagnosis, comorbidities, treatmentSummary, labResults, recommendations
+- Если информации для поля НЕТ — верни null (для скаляров) или [] (для массивов). НЕ выдумывай.
+- Определи тип формы по контексту: "intake" — первичный приём, "epicrisis" — выписной эпикриз.
+- Разделяй ФИО: patient.lastName, patient.firstName, patient.middleName (НЕ "name")
+- Даты в формате YYYY-MM-DD. Если указан возраст, вычисли примерную дату рождения (текущий год - возраст)
+- Давление как "120/80", температура как "36.6", пульс как "72"
+- Пол: "male" | "female" | "other"
+- Аллергии: извлекай упоминания аллергических реакций (пенициллин, аспирин, пыльца, орехи и т.д.)
+- Хронические заболевания: извлекай упоминания хронических болезней (гипертония, диабет, астма и т.д.)
+- Медицинские термины: сохраняй оригинальные термины врача, не упрощай
+- Коды МКБ-10 только если произнесены явно ("жэ ноль шесть девять" → "J06.9")
+- confidence ∈ [0,1]
 
-Не задавай уточняющих вопросов. Не комментируй. Верни JSON.`;
+Не задавай вопросов. Не комментируй. Верни JSON.`;
 
 /**
  * JSON Schema для response_format.json_schema (Structured Outputs, strict=true).
@@ -56,6 +58,8 @@ export const RESPONSE_JSON_SCHEMA = {
           'patient',
           'complaints',
           'anamnesis',
+          'allergies',
+          'chronicDiseases',
           'objectiveStatus',
           'diagnosis',
           'recommendations',
@@ -76,6 +80,16 @@ export const RESPONSE_JSON_SCHEMA = {
           },
           complaints: { type: ['string', 'null'] },
           anamnesis: { type: ['string', 'null'] },
+          allergies: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'List of allergies (medications, foods, pollen, etc.)',
+          },
+          chronicDiseases: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'List of chronic diseases',
+          },
           objectiveStatus: {
             type: 'object',
             additionalProperties: false,

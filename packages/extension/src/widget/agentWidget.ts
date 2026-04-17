@@ -158,6 +158,12 @@ const WIDGET_STYLES = /* css */ `
     width: 0%;
     transition: width 0.3s ease;
   }
+  .progress-text {
+    font-size: 10px;
+    color: #6b7280;
+    margin-top: 2px;
+    text-align: right;
+  }
 
   .icon-mic { width: 20px; height: 20px; fill: currentColor; }
 `;
@@ -177,6 +183,7 @@ export class AgentStatusWidget {
   private statusEl: HTMLElement | null = null;
   private transcriptEl: HTMLElement | null = null;
   private progressBar: HTMLElement | null = null;
+  private progressTextEl: HTMLElement | null = null;
   private shellEl: HTMLElement | null = null;
   private iconSlot: HTMLElement | null = null;
   private currentStatus: AgentStatus = 'idle';
@@ -215,6 +222,7 @@ export class AgentStatusWidget {
         <div class="status">Готов</div>
         <div class="transcript" role="status" aria-live="polite"></div>
         <div class="progress" hidden><div></div></div>
+        <div class="progress-text" hidden></div>
       </div>
     `;
 
@@ -224,6 +232,7 @@ export class AgentStatusWidget {
     this.statusEl = shell.querySelector<HTMLElement>('.status');
     this.transcriptEl = shell.querySelector<HTMLElement>('.transcript');
     this.progressBar = shell.querySelector<HTMLElement>('.progress > div');
+    this.progressTextEl = shell.querySelector<HTMLElement>('.progress-text');
     this.iconSlot = shell.querySelector<HTMLElement>('.icon-slot');
 
     this.micEl?.addEventListener('click', () => {
@@ -274,8 +283,13 @@ export class AgentStatusWidget {
   setProgress(ratio: number): void {
     const progressContainer = this.shellEl?.querySelector<HTMLElement>('.progress');
     if (!progressContainer || !this.progressBar) return;
+    const percent = Math.round(Math.max(0, Math.min(1, ratio)) * 100);
     progressContainer.hidden = ratio <= 0;
-    this.progressBar.style.width = `${Math.round(Math.max(0, Math.min(1, ratio)) * 100)}%`;
+    this.progressBar.style.width = `${percent}%`;
+    if (this.progressTextEl) {
+      this.progressTextEl.hidden = ratio <= 0;
+      this.progressTextEl.textContent = `${percent}% заполнено`;
+    }
   }
 
   /** Подписка на клик по микрофону. */

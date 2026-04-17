@@ -1,18 +1,13 @@
 /**
- * VoiceManager — фасад голосового слоя.
+ * VoiceManager — упрощённый фасад голосового слоя для заполнения формы.
  *
  * Объединяет SpeechRecognizer + SpeechSynthesizer + IntentParser
- * в единый интерфейс для content-script и оркестратора.
+ * в единый интерфейс.
  *
  * Жизненный цикл:
  *   idle → listening → thinking → filling → idle
  *            ↑                                 ↓
  *            ←─────── speaking ← (proactive prompt)
- *
- * Проактивность:
- *   VoiceManager НЕ решает, когда задать вопрос — это делает FormCompletionWatcher
- *   (см. formWatcher.ts). VoiceManager предоставляет speak() / startListening()
- *   и асинхронный askConfirmation() для подтверждений «да/нет».
  */
 
 import { SpeechRecognizer, type RecognizerEvent } from './speechRecognizer';
@@ -76,7 +71,7 @@ export class VoiceManager {
     return this._status;
   }
 
-  /** Ручное переключение статуса (например, из оркестратора после LLM). */
+  /** Ручное переключение статуса. */
   setStatus(status: AgentStatus): void {
     if (this._status === status) return;
     this._status = status;
@@ -109,28 +104,19 @@ export class VoiceManager {
     if (this._status === 'listening') this.setStatus('idle');
   }
 
-  /**
-   * Жёсткий «стоп» всего голосового пайплайна:
-   *  - останавливает распознавание (без авто-рестарта),
-   *  - отменяет синтез речи,
-   *  - разрешает ожидающий askConfirmation() как null.
-   * Используется при явном клике «Стоп» на виджете.
-   */
+  /** Жёсткий «стоп» всего голосового пайплайна. */
   cancelAll(): void {
     this.recognizer.stop();
     this.synthesizer.cancel();
     if (this.pendingConfirmation) {
       const resolve = this.pendingConfirmation;
       this.pendingConfirmation = null;
-      resolve(false); // трактуем как отмену
+      resolve(false);
     }
     this.setStatus('idle');
   }
 
-  /**
-   * Озвучить фразу. Во время речи распознавание приостанавливается
-   * (иначе микрофон услышит голос синтезатора).
-   */
+  /** Озвучить фразу. Во время речи распознавание приостанавливается. */
   async speak(text: string): Promise<void> {
     const wasListening = this.recognizer.listening;
     if (wasListening) this.recognizer.stop();
@@ -142,16 +128,12 @@ export class VoiceManager {
     } finally {
       this.setStatus(prev === 'speaking' ? 'idle' : prev);
       if (wasListening) {
-        // Небольшая пауза, чтобы микрофон не подхватил хвост синтеза.
         setTimeout(() => this.startListening(), 300);
       }
     }
   }
 
-  /**
-   * Проактивный вопрос с ожиданием голосового подтверждения.
-   * Возвращает true (CONFIRM) / false (CANCEL) / null (таймаут).
-   */
+  /** Вопрос с ожиданием голосового подтверждения (да/нет). */
   async askConfirmation(question: string, timeoutMs = 10_000): Promise<boolean | null> {
     await this.speak(question);
 
@@ -168,10 +150,7 @@ export class VoiceManager {
     });
   }
 
-  /**
-   * Захватить один финальный транскрипт (для диктовки).
-   * Возвращает строку транскрипта или null при таймауте.
-   */
+  /** Захватить один финальный транскрипт (для диктовки). */
   async listenOnce(timeoutMs = 15_000): Promise<string | null> {
     return new Promise<string | null>((resolve) => {
       const handler = (parsed: ParsedIntent) => {

@@ -53,11 +53,6 @@ export interface SetAgentStatusMsg {
   status: AgentVisualStatus;
 }
 
-/**
- * Поиск и клик по текстовому содержимому (например, фамилия пациента в таблице).
- * containerSelector — опциональный CSS-скоуп, чтобы не кликнуть по случайному совпадению
- * (например, только внутри таблицы расписания).
- */
 export interface SearchAndClickMsg {
   type: 'rpa:searchAndClick';
   text: string;
@@ -86,20 +81,24 @@ export interface TranscriptMsg {
   type: 'rpa:transcript';
   transcript: string;
   intent: string;
-  arg?: string;
-  /** Свободный payload интента (напр. ФИО для SEARCH_PATIENT). */
-  payload?: string;
   confidence: number;
-}
-
-export interface GenerateScheduleMsg {
-  type: 'rpa:generateSchedule';
+  /** Для EDIT_FIELD: поле и новое значение */
+  field?: string;
+  value?: string;
+  /** Для DELETE_FIELD: поле для удаления */
+  deleteField?: string;
+  /** Для ADD_FIELD: поле и значение для добавления */
+  addField?: string;
+  addValue?: string;
+  /** Для NAVIGATE: целевая страница */
+  target?: string;
+  /** Для OPEN_TAB: URL для открытия */
+  url?: string;
 }
 
 export type ContentToBackgroundMsg =
   | ContentReadyMsg
-  | TranscriptMsg
-  | GenerateScheduleMsg;
+  | TranscriptMsg;
 
 /* ================== Универсальный ответ ================== */
 

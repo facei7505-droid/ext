@@ -47,6 +47,10 @@ export interface StructuredVisit {
   patient: StructuredPatient;
   complaints: string | null;
   anamnesis: string | null;
+  /** Аллергии пациента (медикаменты, продукты, пыльца и т.д.) */
+  allergies: string[];
+  /** Хронические заболевания */
+  chronicDiseases: string[];
   objectiveStatus: StructuredObjectiveStatus;
   diagnosis: StructuredDiagnosis;
   recommendations: StructuredPrescription[];

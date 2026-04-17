@@ -118,12 +118,8 @@ async function handleIncoming(
     }
 
     case 'rpa:transcript': {
-      console.info('[rpa] transcript:', msg.intent, msg.arg ?? '', '—', msg.transcript);
+      console.info('[rpa] transcript:', msg.intent, '—', msg.transcript);
       return orchestrator.handleTranscript(msg);
-    }
-
-    case 'rpa:generateSchedule': {
-      return orchestrator.handleGenerateSchedule();
     }
 
     default: {

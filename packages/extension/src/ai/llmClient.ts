@@ -90,8 +90,12 @@ export class LlmClient {
     }
 
     const content = extractContent(raw);
+    console.log('[llm] Raw content from LLM:', content);
     const parsed = safeJsonParse(content);
-    return normalizeForm(parsed);
+    console.log('[llm] Parsed JSON:', parsed);
+    const normalized = normalizeForm(parsed);
+    console.log('[llm] Normalized response:', JSON.stringify(normalized, null, 2));
+    return normalized;
   }
 
   private async call(path: string, body: unknown): Promise<unknown> {
@@ -216,6 +220,18 @@ function normalizeForm(v: unknown): StructuredFormResponse {
           .filter((r): r is { kind: 'medication' | 'procedure' | 'regimen' | 'referral' | 'other'; text: string } => r !== null)
       : [];
 
+    const allergies = Array.isArray(i.allergies)
+      ? (i.allergies as unknown[])
+          .map((a) => asStr(a))
+          .filter((a): a is string => a !== null)
+      : [];
+
+    const chronicDiseases = Array.isArray(i.chronicDiseases)
+      ? (i.chronicDiseases as unknown[])
+          .map((d) => asStr(d))
+          .filter((d): d is string => d !== null)
+      : [];
+
     const gender = asStr(p.gender);
     const validGender: 'male' | 'female' | 'other' | null =
       gender === 'male' || gender === 'female' || gender === 'other'
@@ -233,6 +249,8 @@ function normalizeForm(v: unknown): StructuredFormResponse {
       },
       complaints: asStr(i.complaints),
       anamnesis: asStr(i.anamnesis),
+      allergies,
+      chronicDiseases,
       objectiveStatus: {
         summary: asStr(os.summary),
         bloodPressure: asStr(os.bloodPressure),

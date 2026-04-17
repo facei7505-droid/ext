@@ -19,7 +19,6 @@ import { fieldSelector, actionSelector } from '@/shared/selectors';
 import type {
   BackgroundToContentMsg,
   ContentReadyMsg,
-  GenerateScheduleMsg,
   RpaResult,
   TranscriptMsg,
 } from '@/shared/messages';
@@ -65,42 +64,16 @@ const proactive = initProactive({
       type: 'rpa:transcript',
       transcript: parsed.raw,
       intent: parsed.intent,
-      arg: parsed.arg,
-      payload: parsed.payload,
       confidence: parsed.confidence,
+      field: parsed.field,
+      value: parsed.value,
+      deleteField: parsed.deleteField,
+      addField: parsed.addField,
+      addValue: parsed.addValue,
+      target: parsed.target,
+      url: parsed.url,
     };
     chrome.runtime.sendMessage(msg).catch(() => { /* background asleep */ });
-  },
-  onRequestSchedule: async () => {
-    const msg: GenerateScheduleMsg = { type: 'rpa:generateSchedule' };
-    try {
-      await chrome.runtime.sendMessage(msg);
-    } catch (err) {
-      console.warn('[rpa] generateSchedule send failed', err);
-    }
-  },
-  onMarkCompleted: async (procedureId, completed) => {
-    // Локальная обработка без отправки в background.
-    const selector = `[data-rpa-procedure="${CSS.escape(procedureId)}"] [data-rpa-procedure-id="${CSS.escape(procedureId)}"]`;
-    const el = await waitForSelector(selector).catch(() => null);
-    if (el) {
-      if (completed && !(el as HTMLInputElement).checked) {
-        clickElement(el);
-      } else if (!completed && (el as HTMLInputElement).checked) {
-        clickElement(el);
-      }
-    }
-  },
-  onStartDictation: async (targetField) => {
-    // Локальная обработка без отправки в background.
-    const selector = `[data-rpa-field="${CSS.escape(targetField)}"]`;
-    const el = await waitForSelector(selector).catch(() => null);
-    if (el) {
-      const transcript = await proactive.voice.listenOnce(15_000);
-      if (transcript) {
-        await typeIntoElement(el, transcript, { human: true });
-      }
-    }
   },
 });
 
@@ -164,7 +137,6 @@ async function handleCommand(msg: BackgroundToContentMsg): Promise<RpaResult> {
     }
 
     case 'rpa:speak': {
-      // Оркестратор просит озвучить фразу через VoiceManager.
       await proactive.voice.speak(msg.text);
       return { ok: true };
     }
@@ -183,7 +155,6 @@ async function handleCommand(msg: BackgroundToContentMsg): Promise<RpaResult> {
           code: 'NOT_FOUND',
         };
       }
-      // Возвращаем короткое описание элемента — полезно для логов оркестратора.
       return {
         ok: true,
         data: {
@@ -194,7 +165,6 @@ async function handleCommand(msg: BackgroundToContentMsg): Promise<RpaResult> {
     }
 
     default: {
-      // Исчерпывающий switch: TypeScript подскажет при расширении union.
       const exhaustive: never = msg;
       return { ok: false, error: `unknown message: ${JSON.stringify(exhaustive)}`, code: 'BAD_ARG' };
     }

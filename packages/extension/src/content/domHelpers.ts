@@ -199,12 +199,10 @@ function focus(el: HTMLElement): void {
    ========================================================================= */
 
 export function clickElement(el: HTMLElement): void {
-  // Полный набор событий для легаси-обработчиков на mousedown/up.
   const opts = { bubbles: true, cancelable: true, view: window } as const;
   el.dispatchEvent(new MouseEvent('mousedown', opts));
   el.dispatchEvent(new MouseEvent('mouseup', opts));
   el.dispatchEvent(new MouseEvent('click', opts));
-  // Фолбэк для <button type="submit"> внутри <form> — native .click() триггерит submit.
   if (typeof (el as HTMLButtonElement).click === 'function') {
     try {
       (el as HTMLButtonElement).click();
@@ -215,14 +213,9 @@ export function clickElement(el: HTMLElement): void {
 }
 
 /* =========================================================================
-   ПОИСК ПО ТЕКСТУ (NLP-ДРУЖЕЛЮБНЫЙ RPA)
+   ПОИСК ПО ТЕКСТУ
    ========================================================================= */
 
-/**
- * Список интерактивных «карточек», которые имеет смысл кликать при поиске
- * пациента по ФИО. Порядок важен: идём от самого специфичного RPA-маркера
- * к общим строкам таблицы / ссылкам.
- */
 const INTERACTIVE_ANCESTOR_SELECTOR = [
   '[data-rpa-patient]',
   '[data-rpa-card]',
@@ -239,18 +232,6 @@ const INTERACTIVE_ANCESTOR_SELECTOR = [
 /**
  * Ищет первый DOM-элемент, чьё текстовое содержимое содержит `text`
  * (регистронезависимо, пробелы нормализованы), и программно кликает по нему.
- *
- * Стратегия:
- *  1. Берём корень поиска (containerSelector или document).
- *  2. Проходим TreeWalker'ом по текстовым узлам — это быстрее и точнее, чем
- *     querySelectorAll('*'), потому что сразу отсекаем стили/скрипты и даёт
- *     прямой доступ к родителю каждого текста.
- *  3. Для найденного текстового узла поднимаемся к ближайшему «интерактивному»
- *     контейнеру (tr / data-rpa-patient / a / button). Клик по tr корректно
- *     сработает в KMIS-мокапе и большинстве таблиц.
- *  4. Если интерактивного предка нет — кликаем по прямому родителю текстового узла.
- *
- * @returns элемент, по которому кликнули; null — если совпадение не найдено.
  */
 export function findAndClickByText(
   text: string,
@@ -270,12 +251,10 @@ export function findAndClickByText(
       acceptNode(node) {
         const parent = node.parentElement;
         if (!parent) return NodeFilter.FILTER_REJECT;
-        // Игнорируем текст внутри скрытых / служебных узлов.
         const tag = parent.tagName;
         if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'NOSCRIPT') {
           return NodeFilter.FILTER_REJECT;
         }
-        // Shadow DOM нашего виджета не проходим — не кликать по себе.
         if (parent.closest('[data-rpa-widget]')) return NodeFilter.FILTER_REJECT;
         const content = node.nodeValue ?? '';
         return content.toLowerCase().includes(needle)
