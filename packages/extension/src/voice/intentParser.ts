@@ -20,6 +20,7 @@ export type VoiceIntent =
   | 'SUBMIT'
   | 'CLEAR'
   | 'NAVIGATE'
+  | 'SEARCH_PATIENT'
   | 'SCHEDULE'
   | 'CONFIRM'
   | 'CANCEL'
@@ -27,8 +28,10 @@ export type VoiceIntent =
 
 export interface ParsedIntent {
   intent: VoiceIntent;
-  /** Дополнительный аргумент: напр. 'intake' для NAVIGATE. */
+  /** Дополнительный аргумент-ключ: напр. 'intake' для NAVIGATE. */
   arg?: string;
+  /** Свободный текстовый payload интента: напр. ФИО «иванова» для SEARCH_PATIENT. */
+  payload?: string;
   /** Оригинальный транскрипт. */
   raw: string;
   /** Уверенность (0..1) на основе совпадения ключевых слов. */
@@ -58,6 +61,23 @@ const RULES: IntentRule[] = [
   {
     intent: 'CLEAR',
     keywords: ['очисти', 'сбрось', 'очистить форму', 'сбросить'],
+  },
+  // SEARCH_PATIENT обязан идти ДО NAVIGATE: «открой приём Иванова» — это поиск пациента,
+  // а не переход на страницу «Приём».
+  {
+    intent: 'SEARCH_PATIENT',
+    keywords: [
+      'найди пациента',
+      'найти пациента',
+      'выбери пациента',
+      'открой пациента',
+      'открой карту',
+      'открой первичный приём',
+      'открой приём',
+      'открой прием',
+    ],
+    argPattern:
+      /(?:найди|найти|выбери|открой)\s+(?:пациента|карту(?:\s+пациента)?|первичный\s+приём|приём|прием)\s+(.+)/i,
   },
   {
     intent: 'NAVIGATE',
@@ -90,31 +110,46 @@ export function parseIntent(transcript: string): ParsedIntent {
 
   for (const rule of RULES) {
     for (const kw of rule.keywords) {
-      if (text.includes(kw)) {
-        let arg: string | undefined;
+      if (!text.includes(kw)) continue;
 
-        if (rule.argPattern) {
-          const m = text.match(rule.argPattern);
-          if (m) {
-            // Пытаемся замаппить аргумент навигации.
-            const argText = m[1].trim();
+      let arg: string | undefined;
+      let payload: string | undefined;
+
+      if (rule.argPattern) {
+        const m = text.match(rule.argPattern);
+        const extracted = m?.[1]?.trim();
+
+        if (extracted) {
+          if (rule.intent === 'NAVIGATE') {
+            // NAVIGATE ожидает семантический ключ маршрута — маппим алиасы.
             for (const [alias, route] of Object.entries(NAV_ALIASES)) {
-              if (argText.includes(alias)) {
+              if (extracted.includes(alias)) {
                 arg = route;
                 break;
               }
             }
-            if (!arg) arg = argText;
+            if (!arg) arg = extracted;
+          } else if (rule.intent === 'SEARCH_PATIENT') {
+            // Для поиска пациента храним сырой текст (фамилию/ФИО) в payload.
+            const name = cleanPatientName(extracted);
+            if (!name) continue; // нет имени — не считаем интентом SEARCH_PATIENT
+            payload = name;
+          } else {
+            arg = extracted;
           }
+        } else if (rule.intent === 'SEARCH_PATIENT') {
+          // Ключевое слово нашлось, но после него пусто → фолбэк в NAVIGATE/DICTATION.
+          continue;
         }
-
-        return {
-          intent: rule.intent,
-          arg,
-          raw: transcript,
-          confidence: 0.85,
-        };
       }
+
+      return {
+        intent: rule.intent,
+        arg,
+        payload,
+        raw: transcript,
+        confidence: 0.85,
+      };
     }
   }
 
@@ -123,4 +158,18 @@ export function parseIntent(transcript: string): ParsedIntent {
     raw: transcript,
     confidence: 0.5,
   };
+}
+
+/**
+ * Нормализует распознанное имя: убирает хвостовые знаки препинания,
+ * служебные слова, лишние пробелы. Возвращает null, если имени фактически нет.
+ */
+function cleanPatientName(raw: string): string | null {
+  const cleaned = raw
+    .replace(/[.,!?;:"']+$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  // Минимум 2 буквы — отсеиваем короткие артефакты STT.
+  if (cleaned.length < 2) return null;
+  return cleaned;
 }

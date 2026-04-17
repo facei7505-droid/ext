@@ -110,6 +110,24 @@ export class VoiceManager {
   }
 
   /**
+   * Жёсткий «стоп» всего голосового пайплайна:
+   *  - останавливает распознавание (без авто-рестарта),
+   *  - отменяет синтез речи,
+   *  - разрешает ожидающий askConfirmation() как null.
+   * Используется при явном клике «Стоп» на виджете.
+   */
+  cancelAll(): void {
+    this.recognizer.stop();
+    this.synthesizer.cancel();
+    if (this.pendingConfirmation) {
+      const resolve = this.pendingConfirmation;
+      this.pendingConfirmation = null;
+      resolve(false); // трактуем как отмену
+    }
+    this.setStatus('idle');
+  }
+
+  /**
    * Озвучить фразу. Во время речи распознавание приостанавливается
    * (иначе микрофон услышит голос синтезатора).
    */
@@ -146,6 +164,28 @@ export class VoiceManager {
           this.pendingConfirmation = null;
           resolve(null);
         }
+      }, timeoutMs);
+    });
+  }
+
+  /**
+   * Захватить один финальный транскрипт (для диктовки).
+   * Возвращает строку транскрипта или null при таймауте.
+   */
+  async listenOnce(timeoutMs = 15_000): Promise<string | null> {
+    return new Promise<string | null>((resolve) => {
+      const handler = (parsed: ParsedIntent) => {
+        this.stopListening();
+        resolve(parsed.raw);
+      };
+
+      const unsub = this.on('transcript', handler);
+      this.startListening();
+
+      setTimeout(() => {
+        unsub();
+        if (this._status === 'listening') this.stopListening();
+        resolve(null);
       }, timeoutMs);
     });
   }

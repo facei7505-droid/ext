@@ -54,6 +54,33 @@ export interface StructuredVisit {
   confidence: number;
 }
 
+/** Тип формы: первичный приём или выписной эпикриз. */
+export type FormType = 'intake' | 'epicrisis';
+
+/** Структурированный выписной эпикриз. */
+export interface StructuredEpicrisis {
+  patientId: string | null;
+  admissionDate: IsoDate | null;
+  dischargeDate: IsoDate | null;
+  department: 'therapy' | 'cardiology' | 'neurology' | 'surgery' | null;
+  doctor: string | null;
+  outcome: 'recovery' | 'improvement' | 'no_change' | 'deterioration' | null;
+  clinicalDiagnosis: string | null;
+  comorbidities: string | null;
+  treatmentSummary: string | null;
+  labResults: string | null;
+  recommendations: string | null;
+  /** Уверенность модели 0..1. */
+  confidence: number;
+}
+
+/** Объединённый ответ LLM с указанием типа формы. */
+export interface StructuredFormResponse {
+  formType: FormType;
+  intake?: StructuredVisit;
+  epicrisis?: StructuredEpicrisis;
+}
+
 export interface LlmRequestInput {
   /** Сырой транскрипт Web Speech API. */
   transcript: string;

@@ -215,6 +215,90 @@ export function clickElement(el: HTMLElement): void {
 }
 
 /* =========================================================================
+   ПОИСК ПО ТЕКСТУ (NLP-ДРУЖЕЛЮБНЫЙ RPA)
+   ========================================================================= */
+
+/**
+ * Список интерактивных «карточек», которые имеет смысл кликать при поиске
+ * пациента по ФИО. Порядок важен: идём от самого специфичного RPA-маркера
+ * к общим строкам таблицы / ссылкам.
+ */
+const INTERACTIVE_ANCESTOR_SELECTOR = [
+  '[data-rpa-patient]',
+  '[data-rpa-card]',
+  '[data-rpa-clickable]',
+  'tr[data-rpa-row]',
+  'tr',
+  'li',
+  'a[href]',
+  'button',
+  '[role="button"]',
+  '[role="link"]',
+].join(',');
+
+/**
+ * Ищет первый DOM-элемент, чьё текстовое содержимое содержит `text`
+ * (регистронезависимо, пробелы нормализованы), и программно кликает по нему.
+ *
+ * Стратегия:
+ *  1. Берём корень поиска (containerSelector или document).
+ *  2. Проходим TreeWalker'ом по текстовым узлам — это быстрее и точнее, чем
+ *     querySelectorAll('*'), потому что сразу отсекаем стили/скрипты и даёт
+ *     прямой доступ к родителю каждого текста.
+ *  3. Для найденного текстового узла поднимаемся к ближайшему «интерактивному»
+ *     контейнеру (tr / data-rpa-patient / a / button). Клик по tr корректно
+ *     сработает в KMIS-мокапе и большинстве таблиц.
+ *  4. Если интерактивного предка нет — кликаем по прямому родителю текстового узла.
+ *
+ * @returns элемент, по которому кликнули; null — если совпадение не найдено.
+ */
+export function findAndClickByText(
+  text: string,
+  containerSelector?: string,
+): HTMLElement | null {
+  const needle = text.trim().toLowerCase();
+  if (!needle) return null;
+
+  const root: ParentNode = containerSelector
+    ? document.querySelector(containerSelector) ?? document
+    : document;
+
+  const walker = document.createTreeWalker(
+    root as Node,
+    NodeFilter.SHOW_TEXT,
+    {
+      acceptNode(node) {
+        const parent = node.parentElement;
+        if (!parent) return NodeFilter.FILTER_REJECT;
+        // Игнорируем текст внутри скрытых / служебных узлов.
+        const tag = parent.tagName;
+        if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'NOSCRIPT') {
+          return NodeFilter.FILTER_REJECT;
+        }
+        // Shadow DOM нашего виджета не проходим — не кликать по себе.
+        if (parent.closest('[data-rpa-widget]')) return NodeFilter.FILTER_REJECT;
+        const content = node.nodeValue ?? '';
+        return content.toLowerCase().includes(needle)
+          ? NodeFilter.FILTER_ACCEPT
+          : NodeFilter.FILTER_REJECT;
+      },
+    },
+  );
+
+  const node = walker.nextNode();
+  if (!node) return null;
+
+  const directParent = node.parentElement;
+  if (!directParent) return null;
+
+  const target =
+    directParent.closest<HTMLElement>(INTERACTIVE_ANCESTOR_SELECTOR) ?? directParent;
+
+  clickElement(target);
+  return target;
+}
+
+/* =========================================================================
    УТИЛИТЫ
    ========================================================================= */
 

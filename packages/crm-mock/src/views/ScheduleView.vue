@@ -47,6 +47,48 @@ const existingAppointments = [
   { time: '11:30-12:00', patient: 'Орлова Е.С.', doctor: 'Сидорова Н.М.', specialty: 'Кардиология' },
 ];
 
+/**
+ * Процедуры текущего пациента на сегодня. В реальном Дамумеде приходит из API,
+ * у нас — локальный реактивный стейт для демо проактивности Модуля 4.
+ */
+interface ProcedureRow {
+  id: string;
+  name: string;
+  specialist: string;
+  time: string;
+  completed: boolean;
+  completedAt: string | null;
+  startedAt: string | null;
+  diary: string;
+}
+
+const procedures = reactive<ProcedureRow[]>([
+  { id: 'proc-lfk',     name: 'ЛФК',              specialist: 'Айгуль М.',  time: '09:00', completed: false, completedAt: null, startedAt: null, diary: '' },
+  { id: 'proc-massage', name: 'Массаж',           specialist: 'Болат К.',   time: '09:40', completed: false, completedAt: null, startedAt: null, diary: '' },
+  { id: 'proc-psycho',  name: 'Психолог',         specialist: 'Дина Ж.',    time: '10:20', completed: false, completedAt: null, startedAt: null, diary: '' },
+]);
+
+/**
+ * «Начать процедуру» — фиксируем момент старта и эмитим CustomEvent
+ * для проактивного агента (procedureWatcher в content-script).
+ */
+function startProcedure(proc: ProcedureRow): void {
+  if (proc.startedAt || proc.completed) return;
+  proc.startedAt = new Date().toISOString();
+  window.dispatchEvent(
+    new CustomEvent('rpa:procedureStarted', {
+      detail: { id: proc.id, name: proc.name, startedAt: proc.startedAt },
+      bubbles: true,
+    }),
+  );
+}
+
+/** Тоггл чекбокса «Выполнено» — фиксирует реальный таймстамп. */
+function toggleCompleted(proc: ProcedureRow, value: boolean): void {
+  proc.completed = value;
+  proc.completedAt = value ? new Date().toISOString() : null;
+}
+
 function onSubmit(): void {
   submittedAt.value = new Date().toISOString();
 }
@@ -178,30 +220,97 @@ function onReset(): void {
       </div>
     </form>
 
-    <!-- Правая панель: текущая загрузка. Структура помечена для RPA-агента. -->
-    <aside class="kmis-panel p-3" data-rpa-region="daySchedule">
-      <h2 class="kmis-section-title">Сегодня</h2>
-      <table class="w-full text-xs" data-rpa-table="appointments">
-        <thead class="text-left text-kmis-muted">
-          <tr>
-            <th class="py-1 pr-2">Время</th>
-            <th class="py-1 pr-2">Пациент</th>
-            <th class="py-1">Врач</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            v-for="(a, idx) in existingAppointments"
-            :key="a.time"
-            class="border-t border-kmis-border"
-            :data-rpa-row="idx"
+    <!-- Правая панель: текущая загрузка + процедуры пациента. -->
+    <aside class="flex flex-col gap-3">
+      <section class="kmis-panel p-3" data-rpa-region="daySchedule">
+        <h2 class="kmis-section-title">Сегодня</h2>
+        <table class="w-full text-xs" data-rpa-table="appointments">
+          <thead class="text-left text-kmis-muted">
+            <tr>
+              <th class="py-1 pr-2">Время</th>
+              <th class="py-1 pr-2">Пациент</th>
+              <th class="py-1">Врач</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="(a, idx) in existingAppointments"
+              :key="a.time"
+              class="border-t border-kmis-border"
+              :data-rpa-row="idx"
+            >
+              <td class="py-1 pr-2 font-mono" :data-rpa-field="`appointments.${idx}.time`">{{ a.time }}</td>
+              <td class="py-1 pr-2" :data-rpa-field="`appointments.${idx}.patient`">{{ a.patient }}</td>
+              <td class="py-1" :data-rpa-field="`appointments.${idx}.doctor`">{{ a.doctor }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- Процедуры текущего пациента (Модуль 4: статусы + дневник). -->
+      <section class="kmis-panel p-3" data-rpa-region="procedures">
+        <h2 class="kmis-section-title">Процедуры</h2>
+        <div class="space-y-2">
+          <div
+            v-for="proc in procedures"
+            :key="proc.id"
+            class="border border-kmis-border rounded p-2 text-xs"
+            :data-rpa-procedure="proc.id"
           >
-            <td class="py-1 pr-2 font-mono" :data-rpa-field="`appointments.${idx}.time`">{{ a.time }}</td>
-            <td class="py-1 pr-2" :data-rpa-field="`appointments.${idx}.patient`">{{ a.patient }}</td>
-            <td class="py-1" :data-rpa-field="`appointments.${idx}.doctor`">{{ a.doctor }}</td>
-          </tr>
-        </tbody>
-      </table>
+            <div class="flex items-center justify-between mb-1">
+              <span class="font-semibold text-kmis-ink">{{ proc.name }}</span>
+              <span class="text-kmis-muted">{{ proc.time }}</span>
+            </div>
+            <div class="text-kmis-muted mb-2">{{ proc.specialist }}</div>
+
+            <div class="flex items-center gap-2 mb-2">
+              <button
+                type="button"
+                :disabled="!!proc.startedAt || proc.completed"
+                class="px-2 py-1 text-xs rounded bg-kmis-accent text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                :data-rpa-action="`startProcedure:${proc.id}`"
+                @click="startProcedure(proc)"
+              >
+                {{ proc.startedAt ? 'В процессе' : 'Начать' }}
+              </button>
+
+              <label class="flex items-center gap-1 text-kmis-ink cursor-pointer">
+                <input
+                  type="checkbox"
+                  :checked="proc.completed"
+                  :disabled="!proc.startedAt"
+                  :data-rpa-action="RpaActions.markCompleted"
+                  :data-rpa-procedure-id="proc.id"
+                  @change="toggleCompleted(proc, ($event.target as HTMLInputElement).checked)"
+                />
+                Выполнено
+              </label>
+
+              <span
+                v-if="proc.completedAt"
+                class="text-kmis-success text-[10px]"
+                :data-rpa-field="`procedures.${proc.id}.completedAt`"
+              >
+                {{ new Date(proc.completedAt).toLocaleTimeString() }}
+              </span>
+            </div>
+
+            <!-- Дневник процедуры — скрыт по умолчанию, раскрывается по клику или RPA-команде. -->
+            <div
+              v-if="proc.completed || proc.diary"
+              class="mt-2"
+            >
+              <textarea
+                v-model="proc.diary"
+                :data-rpa-field="`procedures.${proc.id}.diary`"
+                placeholder="Результат процедуры..."
+                class="w-full rounded border border-kmis-border px-2 py-1 text-xs resize-none"
+                rows="2"
+              ></textarea>
+            </div>
+          </div>
+        </div>
+      </section>
     </aside>
   </div>
 </template>

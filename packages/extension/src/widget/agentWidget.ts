@@ -72,13 +72,14 @@ const WIDGET_STYLES = /* css */ `
   .mic:active { transform: scale(0.96); }
 
   .mic[data-status="listening"] {
-    background: #0b5394;
+    background: #dc2626;
     color: #fff;
   }
   .mic[data-status="speaking"] {
     background: #6b21a8;
     color: #fff;
   }
+  .mic[data-status="listening"]:hover { background: #b91c1c; }
 
   /* Пульсация во время прослушивания */
   .mic[data-status="listening"]::before,
@@ -87,7 +88,7 @@ const WIDGET_STYLES = /* css */ `
     position: absolute;
     inset: 0;
     border-radius: 50%;
-    border: 2px solid #0b5394;
+    border: 2px solid #dc2626;
     animation: pulse 1.8s ease-out infinite;
     opacity: 0;
   }
@@ -246,10 +247,22 @@ export class AgentStatusWidget {
     this.micEl?.setAttribute('data-status', status);
     if (this.statusEl) this.statusEl.textContent = STATUS_LABELS[status];
 
-    // Для thinking/filling показываем спиннер вместо иконки микрофона.
+    // Иконка по статусу: спиннер (thinking/filling) / стоп (listening/speaking) / микрофон.
     if (this.iconSlot) {
       this.iconSlot.innerHTML =
-        status === 'thinking' || status === 'filling' ? SPINNER_SVG : MIC_SVG;
+        status === 'thinking' || status === 'filling' ? SPINNER_SVG
+        : status === 'listening' || status === 'speaking' ? STOP_SVG
+        : MIC_SVG;
+    }
+
+    // aria-label отражает действие, которое совершит клик.
+    if (this.micEl) {
+      const title =
+        status === 'listening' || status === 'speaking'
+          ? 'Остановить микрофон'
+          : 'Включить микрофон';
+      this.micEl.setAttribute('aria-label', title);
+      this.micEl.title = title;
     }
   }
 
@@ -278,6 +291,11 @@ export class AgentStatusWidget {
 const MIC_SVG = `
 <svg class="icon-mic" viewBox="0 0 24 24" aria-hidden="true">
   <path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z"/>
+</svg>`;
+
+const STOP_SVG = `
+<svg class="icon-mic" viewBox="0 0 24 24" aria-hidden="true">
+  <rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/>
 </svg>`;
 
 const SPINNER_SVG = `<span class="spinner" aria-hidden="true"></span>`;

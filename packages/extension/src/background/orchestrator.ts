@@ -26,7 +26,7 @@
  */
 
 import type { TranscriptMsg, BackgroundToContentMsg, RpaResult } from '@/shared/messages';
-import { structureVisit, LlmError } from '@/ai';
+import { structureForm, LlmError } from '@/ai';
 import { generateSchedule, SchedulerError } from './schedulerClient';
 import type {
   ProcedureKind,
@@ -34,6 +34,7 @@ import type {
   ScheduleGenerateResponseDto,
 } from './schedulerClient';
 import { mapVisitToCommands, type MappedProcedure } from './visitMapper';
+import { mapEpicrisisToCommands } from './epicrisisMapper';
 
 export type FsmState =
   | 'IDLE'
@@ -111,6 +112,16 @@ export class Orchestrator {
       return this.handleGenerateSchedule();
     }
 
+    // Голосовая навигация: «открой эпикриз» / «перейди к расписанию».
+    if (msg.intent === 'NAVIGATE') {
+      return this.runNavigateFlow(msg.arg);
+    }
+
+    // «Найди пациента Иванова» / «Открой первичный приём Иванова».
+    if (msg.intent === 'SEARCH_PATIENT') {
+      return this.runSearchPatientFlow(msg.payload);
+    }
+
     // Все прочие финальные транскрипты считаем диктовкой → LLM.
     return this.runLlmFlow(msg.transcript);
   }
@@ -120,6 +131,92 @@ export class Orchestrator {
     return this.runScheduleFlow();
   }
 
+  /**
+   * Семантическая навигация по SPA КМИС без URL-хардкода.
+   * arg — ключ маршрута ('intake' | 'epicrisis' | 'schedule') из intentParser.
+   * Агент находит в сайдбаре ссылку с data-rpa-action="nav:{route}" и кликает.
+   */
+  private async runNavigateFlow(arg: string | undefined): Promise<RpaResult> {
+    const ROUTES = ['intake', 'epicrisis', 'schedule'] as const;
+    const LABELS: Record<(typeof ROUTES)[number], string> = {
+      intake: 'Первичный приём',
+      epicrisis: 'Эпикриз',
+      schedule: 'Расписание',
+    };
+    const route = (ROUTES as readonly string[]).includes(arg ?? '')
+      ? (arg as (typeof ROUTES)[number])
+      : null;
+
+    if (!route) {
+      await this.deps
+        .sendToTab({ type: 'rpa:speak', text: 'Не поняла, куда перейти.' })
+        .catch(() => {});
+      return { ok: false, error: `unknown route: ${arg}`, code: 'BAD_ARG' };
+    }
+
+    const action = `nav:${route}`;
+    const r = await this.deps.sendToTab({ type: 'rpa:clickAction', action });
+    if (!r.ok) {
+      await this.failAndSpeak('Не удалось перейти.', r.error ?? 'clickAction failed');
+      return r;
+    }
+
+    await appendLog({
+      ts: Date.now(),
+      state: 'IDLE',
+      message: `Навигация → ${LABELS[route]}`,
+      level: 'info',
+    });
+    await this.deps
+      .sendToTab({ type: 'rpa:speak', text: `Открываю ${LABELS[route]}.` })
+      .catch(() => {});
+    return { ok: true };
+  }
+
+  /**
+   * «Найди пациента / открой первичный приём <ФИО>».
+   *
+   * Важно: мы не знаем заранее, на какой странице находится список пациентов
+   * в боевом Дамумеде — поэтому вместо хардкода страницы просим content-script
+   * найти DOM-элемент по тексту фамилии где угодно в документе. Если совпадение
+   * отсутствует — голосом сообщаем об этом врачу.
+   */
+  private async runSearchPatientFlow(payload: string | undefined): Promise<RpaResult> {
+    const name = (payload ?? '').trim();
+    if (!name) {
+      await this.deps
+        .sendToTab({ type: 'rpa:speak', text: 'Не расслышала фамилию пациента.' })
+        .catch(() => {});
+      return { ok: false, error: 'empty patient name', code: 'BAD_ARG' };
+    }
+
+    await appendLog({
+      ts: Date.now(),
+      state: 'IDLE',
+      message: `Поиск пациента: «${name}»`,
+      level: 'info',
+    });
+
+    const r = await this.deps.sendToTab({ type: 'rpa:searchAndClick', text: name });
+    if (!r.ok) {
+      await this.deps
+        .sendToTab({ type: 'rpa:speak', text: `Пациент ${name} не найден на странице.` })
+        .catch(() => {});
+      await appendLog({
+        ts: Date.now(),
+        state: 'IDLE',
+        message: `Пациент «${name}» не найден`,
+        level: 'warn',
+      });
+      return r;
+    }
+
+    await this.deps
+      .sendToTab({ type: 'rpa:speak', text: `Открываю карту пациента ${name}.` })
+      .catch(() => {});
+    return { ok: true };
+  }
+
   /* ──────────────────────── Внутренние flow ──────────────────────── */
 
   private async runLlmFlow(transcript: string): Promise<RpaResult> {
@@ -127,9 +224,9 @@ export class Orchestrator {
       'PROCESSING_LLM',
       `Транскрипт: «${transcript.slice(0, 60)}${transcript.length > 60 ? '…' : ''}»`,
     );
-    let visit;
+    let formResponse;
     try {
-      visit = await structureVisit({ transcript });
+      formResponse = await structureForm({ transcript });
     } catch (err) {
       await this.failAndSpeak(
         err instanceof LlmError && err.code === 'CONFIG'
@@ -140,7 +237,26 @@ export class Orchestrator {
       return { ok: false, error: (err as Error).message, code: 'UNKNOWN' };
     }
 
-    const { commands, prescriptions } = mapVisitToCommands(visit);
+    // Выбираем маппер в зависимости от типа формы.
+    let commands;
+    let prescriptions: MappedProcedure[] = [];
+    if (formResponse.formType === 'intake' && formResponse.intake) {
+      const mapped = mapVisitToCommands(formResponse.intake);
+      commands = mapped.commands;
+      prescriptions = mapped.prescriptions;
+    } else if (formResponse.formType === 'epicrisis' && formResponse.epicrisis) {
+      const mapped = mapEpicrisisToCommands(formResponse.epicrisis);
+      commands = mapped.commands;
+      // Для эпикриза назначения не сохраняем — scheduling не нужен.
+    } else {
+      await this.deps.sendToTab({
+        type: 'rpa:speak',
+        text: 'Не удалось определить тип формы или извлечь данные.',
+      }).catch(() => {});
+      await this.setState('IDLE');
+      return { ok: true, data: { filled: 0 } };
+    }
+
     await this.setState('FILLING_DOM', `Получено ${commands.length} полей от LLM`);
 
     if (commands.length === 0) {
@@ -163,8 +279,10 @@ export class Orchestrator {
       }
     }
 
-    // Сохраняем назначения — нужны для последующего scheduling.
-    await chrome.storage.session.set({ [PRESCRIPTIONS_KEY]: prescriptions });
+    // Сохраняем назначения — нужны для последующего scheduling (только для intake).
+    if (formResponse.formType === 'intake') {
+      await chrome.storage.session.set({ [PRESCRIPTIONS_KEY]: prescriptions });
+    }
 
     await this.deps.sendToTab({
       type: 'rpa:speak',

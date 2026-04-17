@@ -30,6 +30,7 @@ export const RpaActions = {
   navIntake: 'nav:intake',
   navEpicrisis: 'nav:epicrisis',
   navSchedule: 'nav:schedule',
+  markCompleted: 'markCompleted',
 } as const;
 export type RpaActionKey = (typeof RpaActions)[keyof typeof RpaActions];
 

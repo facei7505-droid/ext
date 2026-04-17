@@ -53,6 +53,17 @@ export interface SetAgentStatusMsg {
   status: AgentVisualStatus;
 }
 
+/**
+ * Поиск и клик по текстовому содержимому (например, фамилия пациента в таблице).
+ * containerSelector — опциональный CSS-скоуп, чтобы не кликнуть по случайному совпадению
+ * (например, только внутри таблицы расписания).
+ */
+export interface SearchAndClickMsg {
+  type: 'rpa:searchAndClick';
+  text: string;
+  containerSelector?: string;
+}
+
 export type BackgroundToContentMsg =
   | FillFieldMsg
   | ClickActionMsg
@@ -60,7 +71,8 @@ export type BackgroundToContentMsg =
   | QueryDomMsg
   | PingMsg
   | SpeakMsg
-  | SetAgentStatusMsg;
+  | SetAgentStatusMsg
+  | SearchAndClickMsg;
 
 /* ================== content → background ================== */
 
@@ -75,6 +87,8 @@ export interface TranscriptMsg {
   transcript: string;
   intent: string;
   arg?: string;
+  /** Свободный payload интента (напр. ФИО для SEARCH_PATIENT). */
+  payload?: string;
   confidence: number;
 }
 

@@ -14,20 +14,21 @@
 
 export const SYSTEM_PROMPT = `Ты — движок структуризации медицинских приёмов в российской клинике.
 Вход: транскрипт речи врача (иногда с репликами пациента) на русском.
-Задача: заполнить поля первичного приёма.
+Задача: заполнить поля первичного приёма ИЛИ выписного эпикриза в зависимости от контекста.
 
 ПРАВИЛА (обязательны):
 - Отвечай ТОЛЬКО валидным JSON по заданной схеме. Никакого markdown, пояснений, префиксов.
+- Определи тип формы по контексту транскрипта:
+  • "intake" — первичный приём: жалобы, анамнез, объективный статус, диагноз, назначения.
+  • "epicrisis" — выписной эпикриз: проведённое лечение, динамика, рекомендации, исход.
 - Если информации для поля в транскрипте НЕТ — верни null (для скаляров) или [] (для массивов). НЕ выдумывай.
-- ВЛОЖЕННЫЕ ОБЪЕКТЫ patient, objectiveStatus, diagnosis ВСЕГДА присутствуют как объекты (не null). Внутри них уже скаляры могут быть null.
+- ВЛОЖЕННЫЕ ОБЪЕКТЫ patient, objectiveStatus, diagnosis (для intake) ВСЕГДА присутствуют как объекты (не null). Внутри них скаляры могут быть null.
 - Не добавляй поля вне схемы.
 - Значения берёшь из текста, допустимы минимальные нормализации: даты → YYYY-MM-DD, температура → число с точкой ("36.6"), давление → "сист/диаст" (120/80), пульс → число как строка.
 - Коды МКБ-10 указывай только если врач произнёс их явно ("жэ ноль шесть девять" → "J06.9") или название однозначно соответствует стандартному коду. Иначе icd10=null, text=услышанная формулировка.
 - Пол: "male" | "female" | "other". Не угадывай по имени.
-- Жалобы (complaints) — со слов пациента/врача про симптомы.
-- Объективный статус (objectiveStatus) — данные осмотра и измерения.
-- Диагноз (diagnosis) — заключение врача.
-- Назначения (recommendations) — препараты, процедуры, режим, направления. Каждое отдельным элементом с полем kind.
+- Для intake: жалобы (complaints) — со слов пациента/врача про симптомы; объективный статус (objectiveStatus) — данные осмотра; диагноз (diagnosis) — заключение; назначения (recommendations) — препараты, процедуры, режим, направления.
+- Для epicrisis: treatmentSummary — проведённое лечение; labResults — результаты исследований; recommendations — рекомендации при выписке; outcome — исход лечения.
 - confidence ∈ [0,1]: оценивай строго, низкий при неоднозначной речи.
 
 Не задавай уточняющих вопросов. Не комментируй. Верни JSON.`;
@@ -37,69 +38,115 @@ export const SYSTEM_PROMPT = `Ты — движок структуризации
  * Все поля required, additionalProperties:false — так OpenAI/Groq гарантируют форму.
  */
 export const RESPONSE_JSON_SCHEMA = {
-  name: 'StructuredVisit',
+  name: 'StructuredFormResponse',
   strict: true,
   schema: {
     type: 'object',
     additionalProperties: false,
-    required: [
-      'patient',
-      'complaints',
-      'anamnesis',
-      'objectiveStatus',
-      'diagnosis',
-      'recommendations',
-      'confidence',
-    ],
+    required: ['formType', 'confidence'],
     properties: {
-      patient: {
+      formType: {
+        type: 'string',
+        enum: ['intake', 'epicrisis'],
+      },
+      intake: {
         type: 'object',
         additionalProperties: false,
-        required: ['lastName', 'firstName', 'middleName', 'birthDate', 'gender', 'phone'],
+        required: [
+          'patient',
+          'complaints',
+          'anamnesis',
+          'objectiveStatus',
+          'diagnosis',
+          'recommendations',
+        ],
         properties: {
-          lastName: { type: ['string', 'null'] },
-          firstName: { type: ['string', 'null'] },
-          middleName: { type: ['string', 'null'] },
-          birthDate: { type: ['string', 'null'], description: 'YYYY-MM-DD' },
-          gender: { type: ['string', 'null'], enum: ['male', 'female', 'other', null] },
-          phone: { type: ['string', 'null'] },
-        },
-      },
-      complaints: { type: ['string', 'null'] },
-      anamnesis: { type: ['string', 'null'] },
-      objectiveStatus: {
-        type: 'object',
-        additionalProperties: false,
-        required: ['summary', 'bloodPressure', 'pulse', 'temperature'],
-        properties: {
-          summary: { type: ['string', 'null'] },
-          bloodPressure: { type: ['string', 'null'], description: 'sys/dia, e.g. 120/80' },
-          pulse: { type: ['string', 'null'] },
-          temperature: { type: ['string', 'null'] },
-        },
-      },
-      diagnosis: {
-        type: 'object',
-        additionalProperties: false,
-        required: ['icd10', 'text'],
-        properties: {
-          icd10: { type: ['string', 'null'] },
-          text: { type: ['string', 'null'] },
-        },
-      },
-      recommendations: {
-        type: 'array',
-        items: {
-          type: 'object',
-          additionalProperties: false,
-          required: ['kind', 'text'],
-          properties: {
-            kind: {
-              type: 'string',
-              enum: ['medication', 'procedure', 'regimen', 'referral', 'other'],
+          patient: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['lastName', 'firstName', 'middleName', 'birthDate', 'gender', 'phone'],
+            properties: {
+              lastName: { type: ['string', 'null'] },
+              firstName: { type: ['string', 'null'] },
+              middleName: { type: ['string', 'null'] },
+              birthDate: { type: ['string', 'null'], description: 'YYYY-MM-DD' },
+              gender: { type: ['string', 'null'], enum: ['male', 'female', 'other', null] },
+              phone: { type: ['string', 'null'] },
             },
-            text: { type: 'string' },
           },
+          complaints: { type: ['string', 'null'] },
+          anamnesis: { type: ['string', 'null'] },
+          objectiveStatus: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['summary', 'bloodPressure', 'pulse', 'temperature'],
+            properties: {
+              summary: { type: ['string', 'null'] },
+              bloodPressure: { type: ['string', 'null'], description: 'sys/dia, e.g. 120/80' },
+              pulse: { type: ['string', 'null'] },
+              temperature: { type: ['string', 'null'] },
+            },
+          },
+          diagnosis: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['icd10', 'text'],
+            properties: {
+              icd10: { type: ['string', 'null'] },
+              text: { type: ['string', 'null'] },
+            },
+          },
+          recommendations: {
+            type: 'array',
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['kind', 'text'],
+              properties: {
+                kind: {
+                  type: 'string',
+                  enum: ['medication', 'procedure', 'regimen', 'referral', 'other'],
+                },
+                text: { type: 'string' },
+              },
+            },
+          },
+        },
+      },
+      epicrisis: {
+        type: 'object',
+        additionalProperties: false,
+        required: [
+          'patientId',
+          'admissionDate',
+          'dischargeDate',
+          'department',
+          'doctor',
+          'outcome',
+          'clinicalDiagnosis',
+          'comorbidities',
+          'treatmentSummary',
+          'labResults',
+          'recommendations',
+        ],
+        properties: {
+          patientId: { type: ['string', 'null'] },
+          admissionDate: { type: ['string', 'null'], description: 'YYYY-MM-DD' },
+          dischargeDate: { type: ['string', 'null'], description: 'YYYY-MM-DD' },
+          department: {
+            type: ['string', 'null'],
+            enum: ['therapy', 'cardiology', 'neurology', 'surgery', null],
+          },
+          doctor: { type: ['string', 'null'] },
+          outcome: {
+            type: ['string', 'null'],
+            enum: ['recovery', 'improvement', 'no_change', 'deterioration', null],
+          },
+          clinicalDiagnosis: { type: ['string', 'null'] },
+          comorbidities: { type: ['string', 'null'] },
+          treatmentSummary: { type: ['string', 'null'] },
+          labResults: { type: ['string', 'null'] },
+          recommendations: { type: ['string', 'null'] },
         },
       },
       confidence: { type: 'number', minimum: 0, maximum: 1 },

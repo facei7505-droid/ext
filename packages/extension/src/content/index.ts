@@ -12,6 +12,7 @@ import {
   findElement,
   typeIntoElement,
   clickElement,
+  findAndClickByText,
 } from './domHelpers';
 import { waitForSelector } from './domObserver';
 import { fieldSelector, actionSelector } from '@/shared/selectors';
@@ -65,6 +66,7 @@ const proactive = initProactive({
       transcript: parsed.raw,
       intent: parsed.intent,
       arg: parsed.arg,
+      payload: parsed.payload,
       confidence: parsed.confidence,
     };
     chrome.runtime.sendMessage(msg).catch(() => { /* background asleep */ });
@@ -75,6 +77,29 @@ const proactive = initProactive({
       await chrome.runtime.sendMessage(msg);
     } catch (err) {
       console.warn('[rpa] generateSchedule send failed', err);
+    }
+  },
+  onMarkCompleted: async (procedureId, completed) => {
+    // Локальная обработка без отправки в background.
+    const selector = `[data-rpa-procedure="${CSS.escape(procedureId)}"] [data-rpa-procedure-id="${CSS.escape(procedureId)}"]`;
+    const el = await waitForSelector(selector).catch(() => null);
+    if (el) {
+      if (completed && !(el as HTMLInputElement).checked) {
+        clickElement(el);
+      } else if (!completed && (el as HTMLInputElement).checked) {
+        clickElement(el);
+      }
+    }
+  },
+  onStartDictation: async (targetField) => {
+    // Локальная обработка без отправки в background.
+    const selector = `[data-rpa-field="${CSS.escape(targetField)}"]`;
+    const el = await waitForSelector(selector).catch(() => null);
+    if (el) {
+      const transcript = await proactive.voice.listenOnce(15_000);
+      if (transcript) {
+        await typeIntoElement(el, transcript, { human: true });
+      }
     }
   },
 });
@@ -147,6 +172,25 @@ async function handleCommand(msg: BackgroundToContentMsg): Promise<RpaResult> {
     case 'rpa:setAgentStatus': {
       proactive.voice.setStatus(msg.status);
       return { ok: true };
+    }
+
+    case 'rpa:searchAndClick': {
+      const el = findAndClickByText(msg.text, msg.containerSelector);
+      if (!el) {
+        return {
+          ok: false,
+          error: `no DOM node matches text "${msg.text}"`,
+          code: 'NOT_FOUND',
+        };
+      }
+      // Возвращаем короткое описание элемента — полезно для логов оркестратора.
+      return {
+        ok: true,
+        data: {
+          tag: el.tagName.toLowerCase(),
+          text: (el.textContent ?? '').trim().slice(0, 120),
+        },
+      };
     }
 
     default: {

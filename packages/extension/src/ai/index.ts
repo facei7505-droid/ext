@@ -4,7 +4,7 @@
  */
 
 import { LlmClient, LlmError } from './llmClient';
-import type { LlmRequestInput, StructuredVisit } from './types';
+import type { LlmRequestInput, StructuredFormResponse } from '@shared/visit';
 
 const STORAGE_KEYS = {
   apiKey: 'rpa.llm.apiKey',
@@ -29,9 +29,9 @@ export async function getLlmClient(): Promise<LlmClient> {
   });
 }
 
-export async function structureVisit(input: LlmRequestInput): Promise<StructuredVisit> {
+export async function structureForm(input: LlmRequestInput): Promise<StructuredFormResponse> {
   const client = await getLlmClient();
-  return client.structureVisit(input);
+  return client.structureForm(input);
 }
 
 export { LlmClient, LlmError };

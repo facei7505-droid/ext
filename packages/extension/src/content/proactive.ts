@@ -12,12 +12,16 @@
  *        - onComplete → voice.askConfirmation("Осмотр заполнен. Сформировать расписание?")
  *          → при 'да': шлём background команду на генерацию расписания (Модуль 4)
  *          → при 'нет': просто молчим до следующего заполнения
- *   6. Финальные транскрипты пересылаем в background (для LLM/интентов).
+ *   6. ProcedureWatcher для проактивного напоминания о завершении процедур:
+ *        - procedure:start → через 10с askConfirmation("Процедура завершена?")
+ *          → при 'да': markCompleted + startDictation для дневника
+ *   7. Финальные транскрипты пересылаем в background (для LLM/интентов).
  */
 
 import { AgentStatusWidget } from '@/widget/agentWidget';
 import { VoiceManager } from '@/voice/voiceManager';
 import { FormCompletionWatcher } from '@/voice/formWatcher';
+import { ProcedureWatcher } from '@/voice/procedureWatcher';
 import { RpaForms } from '@/shared/selectors';
 import type { ParsedIntent } from '@/voice/intentParser';
 
@@ -34,6 +38,10 @@ export interface ProactiveHandle {
 export interface ProactiveCallbacks {
   onFinalTranscript?: (parsed: ParsedIntent) => void;
   onRequestSchedule?: () => Promise<void> | void;
+  /** Отметить процедуру выполненной (content → background → content). */
+  onMarkCompleted?: (procedureId: string, completed: boolean) => Promise<void>;
+  /** Запустить диктовку в поле (content → background → content). */
+  onStartDictation?: (targetField: string) => Promise<void>;
 }
 
 export function initProactive(cb: ProactiveCallbacks = {}): ProactiveHandle {
@@ -58,10 +66,12 @@ export function initProactive(cb: ProactiveCallbacks = {}): ProactiveHandle {
     widget.setTranscript(`⚠ ${err}`);
   });
 
-  // Переключение микрофона.
+  // Переключение микрофона: любой активный режим → полный стоп; иначе — старт.
   widget.onMicClick(() => {
-    if (voice.status === 'listening') {
-      voice.stopListening();
+    const s = voice.status;
+    if (s === 'listening' || s === 'speaking' || s === 'thinking' || s === 'filling') {
+      voice.cancelAll();
+      widget.setTranscript('');
     } else {
       voice.startListening();
     }
@@ -95,11 +105,26 @@ export function initProactive(cb: ProactiveCallbacks = {}): ProactiveHandle {
   });
   watcher.start();
 
+  // Проактивный watcher для процедур (Модуль 4).
+  const procedureWatcher = new ProcedureWatcher(voice, {
+    askConfirmation: async (prompt) => {
+      const answer = await voice.askConfirmation(prompt, 10_000);
+      return answer === true;
+    },
+    markCompleted: async (procedureId, completed) => {
+      await cb.onMarkCompleted?.(procedureId, completed);
+    },
+    startDictation: async (targetField) => {
+      await cb.onStartDictation?.(targetField);
+    },
+  });
+
   return {
     voice,
     widget,
     destroy: () => {
       watcher.stop();
+      procedureWatcher.destroy();
       voice.destroy();
       widget.unmount();
     },

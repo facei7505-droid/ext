@@ -1,5 +1,5 @@
 /**
- * LLM-клиент: транскрипт → StructuredVisit (JSON).
+ * LLM-клиент: транскрипт → StructuredFormResponse (JSON).
  *
  * Используем OpenAI-совместимый endpoint /v1/chat/completions с
  *   response_format = { type: 'json_schema', json_schema: { strict: true, ... } }.
@@ -15,7 +15,7 @@
  */
 
 import { RESPONSE_JSON_SCHEMA, SYSTEM_PROMPT } from './systemPrompt';
-import type { LlmClientConfig, LlmRequestInput, StructuredVisit } from './types';
+import type { LlmClientConfig, LlmRequestInput, StructuredFormResponse } from '@shared/visit';
 
 const DEFAULT_BASE_URL = 'https://api.openai.com/v1';
 const DEFAULT_MODEL = 'gpt-4o-mini';
@@ -46,10 +46,10 @@ export class LlmClient {
   }
 
   /**
-   * Основной метод: превращает транскрипт в StructuredVisit.
+   * Основной метод: превращает транскрипт в StructuredFormResponse.
    * Гарантирует, что вернётся объект, соответствующий схеме (или LlmError).
    */
-  async structureVisit(input: LlmRequestInput): Promise<StructuredVisit> {
+  async structureForm(input: LlmRequestInput): Promise<StructuredFormResponse> {
     const userContent = buildUserMessage(input);
 
     const baseBody = {
@@ -91,7 +91,7 @@ export class LlmClient {
 
     const content = extractContent(raw);
     const parsed = safeJsonParse(content);
-    return normalizeVisit(parsed);
+    return normalizeForm(parsed);
   }
 
   private async call(path: string, body: unknown): Promise<unknown> {
@@ -167,7 +167,7 @@ function safeJsonParse(content: string): unknown {
 }
 
 /**
- * Нормализует ответ LLM в строгий StructuredVisit.
+ * Нормализует ответ LLM в строгий StructuredFormResponse.
  *
  * Модели в json_object режиме (а иногда и в json_schema fallback'е у Groq)
  * могут пропускать поля или возвращать null вместо вложенных объектов.
@@ -176,7 +176,7 @@ function safeJsonParse(content: string): unknown {
  *
  * Бросает LlmError только если сам корень — не объект.
  */
-function normalizeVisit(v: unknown): StructuredVisit {
+function normalizeForm(v: unknown): StructuredFormResponse {
   if (!v || typeof v !== 'object') {
     throw new LlmError('response is not an object', 'SHAPE');
   }
@@ -187,54 +187,102 @@ function normalizeVisit(v: unknown): StructuredVisit {
   const asObj = (x: unknown): Record<string, unknown> =>
     x && typeof x === 'object' ? (x as Record<string, unknown>) : {};
 
-  const p = asObj(o.patient);
-  const os = asObj(o.objectiveStatus);
-  const dx = asObj(o.diagnosis);
+  const formType = asStr(o.formType) === 'intake' || asStr(o.formType) === 'epicrisis'
+    ? (asStr(o.formType) as 'intake' | 'epicrisis')
+    : 'intake'; // fallback по умолчанию
 
-  const recs = Array.isArray(o.recommendations)
-    ? (o.recommendations as unknown[])
-        .map((r) => {
-          const ro = asObj(r);
-          const text = asStr(ro.text);
-          if (!text) return null;
-          const kindRaw = typeof ro.kind === 'string' ? ro.kind : 'other';
-          const kind = (
-            ['medication', 'procedure', 'regimen', 'referral', 'other'] as const
-          ).includes(kindRaw as 'other')
-            ? (kindRaw as StructuredVisit['recommendations'][number]['kind'])
-            : 'other';
-          return { kind, text };
-        })
-        .filter((r): r is StructuredVisit['recommendations'][number] => r !== null)
-    : [];
+  const intake = asObj(o.intake);
+  const epicrisis = asObj(o.epicrisis);
 
-  const gender = asStr(p.gender);
-  const validGender = gender === 'male' || gender === 'female' || gender === 'other'
-    ? gender
-    : null;
+  const normalizeIntake = (i: Record<string, unknown>) => {
+    const p = asObj(i.patient);
+    const os = asObj(i.objectiveStatus);
+    const dx = asObj(i.diagnosis);
 
-  return {
-    patient: {
-      lastName: asStr(p.lastName),
-      firstName: asStr(p.firstName),
-      middleName: asStr(p.middleName),
-      birthDate: asStr(p.birthDate),
-      gender: validGender,
-      phone: asStr(p.phone),
-    },
-    complaints: asStr(o.complaints),
-    anamnesis: asStr(o.anamnesis),
-    objectiveStatus: {
-      summary: asStr(os.summary),
-      bloodPressure: asStr(os.bloodPressure),
-      pulse: asStr(os.pulse),
-      temperature: asStr(os.temperature),
-    },
-    diagnosis: {
-      icd10: asStr(dx.icd10),
-      text: asStr(dx.text),
-    },
-    recommendations: recs,
-    confidence: typeof o.confidence === 'number' ? o.confidence : 0.5,
+    const recs = Array.isArray(i.recommendations)
+      ? (i.recommendations as unknown[])
+          .map((r) => {
+            const ro = asObj(r);
+            const text = asStr(ro.text);
+            if (!text) return null;
+            const kindRaw = typeof ro.kind === 'string' ? ro.kind : 'other';
+            const kind = (
+              ['medication', 'procedure', 'regimen', 'referral', 'other'] as const
+            ).includes(kindRaw as 'other')
+              ? (kindRaw as 'medication' | 'procedure' | 'regimen' | 'referral' | 'other')
+              : 'other';
+            return { kind, text } as const;
+          })
+          .filter((r): r is { kind: 'medication' | 'procedure' | 'regimen' | 'referral' | 'other'; text: string } => r !== null)
+      : [];
+
+    const gender = asStr(p.gender);
+    const validGender: 'male' | 'female' | 'other' | null =
+      gender === 'male' || gender === 'female' || gender === 'other'
+        ? (gender as 'male' | 'female' | 'other')
+        : null;
+
+    return {
+      patient: {
+        lastName: asStr(p.lastName),
+        firstName: asStr(p.firstName),
+        middleName: asStr(p.middleName),
+        birthDate: asStr(p.birthDate),
+        gender: validGender,
+        phone: asStr(p.phone),
+      },
+      complaints: asStr(i.complaints),
+      anamnesis: asStr(i.anamnesis),
+      objectiveStatus: {
+        summary: asStr(os.summary),
+        bloodPressure: asStr(os.bloodPressure),
+        pulse: asStr(os.pulse),
+        temperature: asStr(os.temperature),
+      },
+      diagnosis: {
+        icd10: asStr(dx.icd10),
+        text: asStr(dx.text),
+      },
+      recommendations: recs,
+      confidence: typeof o.confidence === 'number' ? o.confidence : 0.5,
+    };
   };
+
+  const normalizeEpicrisis = (e: Record<string, unknown>) => {
+    const department = asStr(e.department);
+    const validDepartment = ['therapy', 'cardiology', 'neurology', 'surgery'].includes(department ?? '')
+      ? (department as 'therapy' | 'cardiology' | 'neurology' | 'surgery')
+      : null;
+    const outcome = asStr(e.outcome);
+    const validOutcome = ['recovery', 'improvement', 'no_change', 'deterioration'].includes(outcome ?? '')
+      ? (outcome as 'recovery' | 'improvement' | 'no_change' | 'deterioration')
+      : null;
+
+    return {
+      patientId: asStr(e.patientId),
+      admissionDate: asStr(e.admissionDate),
+      dischargeDate: asStr(e.dischargeDate),
+      department: validDepartment,
+      doctor: asStr(e.doctor),
+      outcome: validOutcome,
+      clinicalDiagnosis: asStr(e.clinicalDiagnosis),
+      comorbidities: asStr(e.comorbidities),
+      treatmentSummary: asStr(e.treatmentSummary),
+      labResults: asStr(e.labResults),
+      recommendations: asStr(e.recommendations),
+      confidence: typeof o.confidence === 'number' ? o.confidence : 0.5,
+    };
+  };
+
+  const result: StructuredFormResponse = {
+    formType,
+  };
+
+  if (formType === 'intake' && Object.keys(intake).length > 0) {
+    result.intake = normalizeIntake(intake);
+  } else if (formType === 'epicrisis' && Object.keys(epicrisis).length > 0) {
+    result.epicrisis = normalizeEpicrisis(epicrisis);
+  }
+
+  return result;
 }
