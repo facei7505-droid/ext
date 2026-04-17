@@ -6,9 +6,11 @@ import { RpaActions, RpaRoutes } from '@/rpa/selectors';
  * для семантической навигации агентом без разбора URL.
  */
 const items = [
-  { to: '/intake', label: 'Первичный прием', action: RpaActions.navIntake, route: RpaRoutes.intake },
-  { to: '/epicrisis', label: 'Эпикриз', action: RpaActions.navEpicrisis, route: RpaRoutes.epicrisis },
-  { to: '/schedule', label: 'Расписание', action: RpaActions.navSchedule, route: RpaRoutes.schedule },
+  { to: '/intake-damumed', label: 'Первичный осмотр', action: RpaActions.navIntake, route: RpaRoutes.intake },
+  { to: '/epicrisis-damumed', label: 'Выписной эпикриз', action: RpaActions.navEpicrisis, route: RpaRoutes.epicrisis },
+  { to: '/diary-damumed', label: 'Дневниковая запись', action: 'nav:diary', route: 'diary' },
+  { to: '/diagnoses-damumed', label: 'Диагнозы', action: 'nav:diagnoses', route: 'diagnoses' },
+  { to: '/assignments-damumed', label: 'Назначения', action: 'nav:assignments', route: 'assignments' },
 ] as const;
 </script>
 

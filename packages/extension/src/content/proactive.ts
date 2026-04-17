@@ -68,7 +68,10 @@ export function initProactive(cb: ProactiveCallbacks = {}): ProactiveHandle {
   // Проактивный watcher на форме первичного приёма.
   const watcher = new FormCompletionWatcher({
     form: RpaForms.intake,
-    onProgress: (ratio) => widget.setProgress(ratio),
+    onProgress: (ratio) => {
+      // Прогресс отключен по запросу пользователя
+      console.log('[rpa] form progress:', ratio);
+    },
     onComplete: async () => {
       const answer = await voice.askConfirmation(
         'Форма заполнена. Сохранить?',

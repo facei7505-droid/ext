@@ -11,7 +11,7 @@ import { createRouter, createWebHashHistory, type RouteRecordRaw } from 'vue-rou
 const routes: RouteRecordRaw[] = [
   {
     path: '/',
-    redirect: '/intake',
+    redirect: '/intake-damumed',
   },
   {
     path: '/intake',
@@ -20,20 +20,44 @@ const routes: RouteRecordRaw[] = [
     meta: { title: 'Первичный прием', rpaRoute: 'intake' },
   },
   {
+    path: '/intake-damumed',
+    name: 'intake-damumed',
+    component: () => import('@/views/IntakeDamumed.vue'),
+    meta: { title: 'Первичный осмотр (Дамумед)', rpaRoute: 'intake' },
+  },
+  {
     path: '/epicrisis',
     name: 'epicrisis',
     component: () => import('@/views/EpicrisisView.vue'),
     meta: { title: 'Эпикриз', rpaRoute: 'epicrisis' },
   },
   {
-    path: '/schedule',
-    name: 'schedule',
-    component: () => import('@/views/ScheduleView.vue'),
-    meta: { title: 'Расписание', rpaRoute: 'schedule' },
+    path: '/epicrisis-damumed',
+    name: 'epicrisis-damumed',
+    component: () => import('@/views/EpicrisisDamumed.vue'),
+    meta: { title: 'Выписной эпикриз (Дамумед)', rpaRoute: 'epicrisis' },
+  },
+  {
+    path: '/diary-damumed',
+    name: 'diary-damumed',
+    component: () => import('@/views/DiaryDamumed.vue'),
+    meta: { title: 'Дневниковая запись (Дамумед)', rpaRoute: 'diary' },
+  },
+  {
+    path: '/diagnoses-damumed',
+    name: 'diagnoses-damumed',
+    component: () => import('@/views/DiagnosesDamumed.vue'),
+    meta: { title: 'Диагнозы (Дамумед)', rpaRoute: 'diagnoses' },
+  },
+  {
+    path: '/assignments-damumed',
+    name: 'assignments-damumed',
+    component: () => import('@/views/AssignmentsDamumed.vue'),
+    meta: { title: 'Назначения (Дамумед)', rpaRoute: 'assignments' },
   },
   {
     path: '/:pathMatch(.*)*',
-    redirect: '/intake',
+    redirect: '/intake-damumed',
   },
 ];
 

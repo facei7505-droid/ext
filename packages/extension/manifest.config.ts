@@ -32,6 +32,8 @@ export default defineManifest({
       matches: [
         'http://localhost:5173/*',
         'http://127.0.0.1:5173/*',
+        'http://localhost:5174/*',
+        'http://127.0.0.1:5174/*',
       ],
       js: ['src/content/index.ts'],
       run_at: 'document_idle',
@@ -43,6 +45,8 @@ export default defineManifest({
   host_permissions: [
     'http://localhost:5173/*',
     'http://127.0.0.1:5173/*',
+    'http://localhost:5174/*',
+    'http://127.0.0.1:5174/*',
     // Scheduler service (Модуль 4).
     'http://localhost:8000/*',
     'http://127.0.0.1:8000/*',

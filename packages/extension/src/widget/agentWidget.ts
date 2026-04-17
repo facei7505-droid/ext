@@ -145,26 +145,6 @@ const WIDGET_STYLES = /* css */ `
     font-style: italic;
   }
 
-  .progress {
-    height: 3px;
-    background: #e5e7eb;
-    border-radius: 2px;
-    overflow: hidden;
-    margin-top: 4px;
-  }
-  .progress > div {
-    height: 100%;
-    background: linear-gradient(90deg, #0b5394, #166534);
-    width: 0%;
-    transition: width 0.3s ease;
-  }
-  .progress-text {
-    font-size: 10px;
-    color: #6b7280;
-    margin-top: 2px;
-    text-align: right;
-  }
-
   .icon-mic { width: 20px; height: 20px; fill: currentColor; }
 `;
 
@@ -182,8 +162,6 @@ export class AgentStatusWidget {
   private micEl: HTMLButtonElement | null = null;
   private statusEl: HTMLElement | null = null;
   private transcriptEl: HTMLElement | null = null;
-  private progressBar: HTMLElement | null = null;
-  private progressTextEl: HTMLElement | null = null;
   private shellEl: HTMLElement | null = null;
   private iconSlot: HTMLElement | null = null;
   private currentStatus: AgentStatus = 'idle';
@@ -221,8 +199,6 @@ export class AgentStatusWidget {
       <div class="info">
         <div class="status">Готов</div>
         <div class="transcript" role="status" aria-live="polite"></div>
-        <div class="progress" hidden><div></div></div>
-        <div class="progress-text" hidden></div>
       </div>
     `;
 
@@ -231,8 +207,6 @@ export class AgentStatusWidget {
     this.micEl = shell.querySelector<HTMLButtonElement>('.mic');
     this.statusEl = shell.querySelector<HTMLElement>('.status');
     this.transcriptEl = shell.querySelector<HTMLElement>('.transcript');
-    this.progressBar = shell.querySelector<HTMLElement>('.progress > div');
-    this.progressTextEl = shell.querySelector<HTMLElement>('.progress-text');
     this.iconSlot = shell.querySelector<HTMLElement>('.icon-slot');
 
     this.micEl?.addEventListener('click', () => {
@@ -277,19 +251,6 @@ export class AgentStatusWidget {
 
   setTranscript(text: string): void {
     if (this.transcriptEl) this.transcriptEl.textContent = text;
-  }
-
-  /** Прогресс заполнения формы 0..1. */
-  setProgress(ratio: number): void {
-    const progressContainer = this.shellEl?.querySelector<HTMLElement>('.progress');
-    if (!progressContainer || !this.progressBar) return;
-    const percent = Math.round(Math.max(0, Math.min(1, ratio)) * 100);
-    progressContainer.hidden = ratio <= 0;
-    this.progressBar.style.width = `${percent}%`;
-    if (this.progressTextEl) {
-      this.progressTextEl.hidden = ratio <= 0;
-      this.progressTextEl.textContent = `${percent}% заполнено`;
-    }
   }
 
   /** Подписка на клик по микрофону. */
