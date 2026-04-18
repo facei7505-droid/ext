@@ -35,6 +35,7 @@ export class VoiceManager {
   private listeners: { [K in EventKey]?: Array<EventHandler<K>> } = {};
   /** Резолвер для askConfirmation() — ожидает следующий CONFIRM/CANCEL. */
   private pendingConfirmation: ((result: boolean) => void) | null = null;
+  private _manuallyStopped: boolean = false;
 
   constructor() {
     this.recognizer = new SpeechRecognizer();
@@ -105,9 +106,27 @@ export class VoiceManager {
   /** Начать прослушивание микрофона (требует user gesture). */
   startListening(): void {
     if (this._status === 'listening') return;
+    if (this._manuallyStopped) return;
     this.synthesizer.cancel();
     this.setStatus('listening');
     this.recognizer.start();
+  }
+
+  /** Ручная остановка микрофона (предотвращает авто-рестарт). */
+  stopManually(): void {
+    this._manuallyStopped = true;
+    this.cancelAll();
+  }
+
+  /** Ручное включение микрофона (сбрасывает флаг ручной остановки). */
+  resumeManually(): void {
+    this._manuallyStopped = false;
+    this.startListening();
+  }
+
+  /** Проверка, был ли микрофон остановлен вручную. */
+  get isManuallyStopped(): boolean {
+    return this._manuallyStopped;
   }
 
   /** Остановить прослушивание. */

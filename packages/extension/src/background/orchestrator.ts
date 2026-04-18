@@ -28,6 +28,54 @@ export type FsmState =
   | 'PROCESSING_LLM'
   | 'FILLING_DOM';
 
+/** Маппинг внутренних ключей полей на человеческие названия для озвучки. */
+const FIELD_LABELS: Record<string, string> = {
+  'patient.iin': 'ИИН',
+  'patient.lastName': 'фамилия',
+  'patient.firstName': 'имя',
+  'patient.middleName': 'отчество',
+  'patient.birthDate': 'дата рождения',
+  'patient.gender': 'пол',
+  'patient.phone': 'телефон',
+  'patient.address': 'адрес',
+  'patient.department': 'отделение',
+  'patient.admissionDate': 'дата поступления',
+  'visit.diagnosis': 'диагноз',
+  'visit.complaints': 'жалобы',
+  'visit.anamnesis': 'анамнез',
+  'visit.bloodPressure': 'артериальное давление',
+  'visit.pulse': 'пульс',
+  'visit.temperature': 'температура',
+  'visit.recommendations': 'рекомендации',
+  'epicrisis.finalDiagnosis': 'окончательный диагноз',
+  'epicrisis.treatmentResults': 'результаты лечения',
+  'epicrisis.disabilityGroup': 'группа инвалидности',
+  'epicrisis.dischargeDate': 'дата выписки',
+  'epicrisis.followUp': 'рекомендации',
+  'epicrisis.nextVisitDate': 'дата следующего визита',
+  'diary.date': 'дата',
+  'diary.subjective': 'субъективный статус',
+  'diary.objective': 'объективный статус',
+  'diary.assessment': 'оценка',
+  'diary.plan': 'план',
+  'diagnoses.new.code': 'код диагноза',
+  'diagnoses.new.name': 'название диагноза',
+  'diagnoses.new.type': 'тип диагноза',
+  'diagnoses.new.date': 'дата диагноза',
+  'assignments.new.name': 'название назначения',
+  'assignments.new.dosage': 'дозировка',
+  'assignments.new.frequency': 'частота приёма',
+  'assignments.new.startDate': 'дата начала',
+  'assignments.new.endDate': 'дата окончания',
+  'assignments.new.type': 'тип назначения',
+};
+
+function fieldLabel(field: string): string {
+  if (FIELD_LABELS[field]) return FIELD_LABELS[field];
+  const parts = field.split('.');
+  return parts[parts.length - 1] || field;
+}
+
 const STATE_KEY = 'rpa.fsm.state';
 const LOG_KEY = 'rpa.fsm.log';
 const LOG_MAX_ENTRIES = 50;
@@ -181,9 +229,10 @@ export class Orchestrator {
         value,
         humanTyping: false,
       });
+      const label = fieldLabel(field);
       await this.deps.sendToTab({
         type: 'rpa:speak',
-        text: r.ok ? `Поле ${field} изменено на ${value}` : `Ошибка изменения поля ${field}`,
+        text: r.ok ? `${label}: ${value}` : `Ошибка изменения поля ${label}`,
       }).catch(() => {});
 
       // Проверяем, нужно ли предложить следующий шаг
@@ -200,7 +249,29 @@ export class Orchestrator {
 
   /** Проверяет состояние формы и предлагает следующий шаг если нужно */
   private async checkAndSuggestNextStep(form: RpaFormKey): Promise<void> {
-    // Определяем предложения для каждой формы
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    // Проверяем обязательные поля — content script вернёт список незаполненных
+    // и нарисует красные звёздочки возле соответствующих input'ов.
+    const check = await this.deps.sendToTab({
+      type: 'rpa:checkRequired',
+      form,
+    }).catch(() => null);
+
+    const missing = (check && check.ok && check.data && Array.isArray((check.data as { missing?: string[] }).missing))
+      ? (check.data as { missing: string[] }).missing
+      : [];
+
+    if (missing.length > 0) {
+      await this.deps.sendToTab({
+        type: 'rpa:speak',
+        text: 'Заполните все обязательные поля.',
+        silentAfter: true,
+      }).catch(() => {});
+      return;
+    }
+
+    // Все обязательные поля заполнены — предлагаем следующий шаг
     const suggestions: Record<RpaFormKey, string> = {
       'intake': 'Первичный осмотр заполнен. Сформировать расписание процедур для пациента?',
       'epicrisis': 'Выписной эпикриз заполнен. Сохранить данные пациента?',
@@ -211,8 +282,6 @@ export class Orchestrator {
 
     const suggestion = suggestions[form];
     if (suggestion) {
-      // Задержка перед предложением
-      await new Promise(resolve => setTimeout(resolve, 1000));
       await this.deps.sendToTab({
         type: 'rpa:speak',
         text: suggestion,
@@ -231,9 +300,10 @@ export class Orchestrator {
         value: '',
         humanTyping: false,
       });
+      const label = fieldLabel(field);
       await this.deps.sendToTab({
         type: 'rpa:speak',
-        text: r.ok ? `Поле ${field} очищено` : `Ошибка очистки поля ${field}`,
+        text: r.ok ? `Поле ${label} очищено` : `Ошибка очистки поля ${label}`,
       }).catch(() => {});
       return r;
     } finally {
@@ -251,9 +321,10 @@ export class Orchestrator {
         value,
         humanTyping: false,
       });
+      const label = fieldLabel(field);
       await this.deps.sendToTab({
         type: 'rpa:speak',
-        text: r.ok ? `Добавлено в поле ${field}: ${value}` : `Ошибка добавления в поле ${field}`,
+        text: r.ok ? `Добавлено в поле ${label}: ${value}` : `Ошибка добавления в поле ${label}`,
       }).catch(() => {});
       return r;
     } finally {
@@ -314,9 +385,12 @@ export class Orchestrator {
       type: 'rpa:navigate',
       target,
     });
+    const label = (r.ok && r.data && typeof (r.data as { label?: string }).label === 'string')
+      ? (r.data as { label: string }).label
+      : target;
     await this.deps.sendToTab({
       type: 'rpa:speak',
-      text: r.ok ? `Переход на ${target} выполнен` : `Ошибка перехода на ${target}`,
+      text: r.ok ? `Переход на ${label} выполнен` : `Ошибка перехода на ${target}`,
       silentAfter: true,
     }).catch(() => {});
     await this.setState('IDLE');

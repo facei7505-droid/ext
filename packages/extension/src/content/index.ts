@@ -385,6 +385,95 @@ chrome.runtime.onMessage.addListener(
   },
 );
 
+/** Рисует красную звёздочку в верхнем углу элемента (для обязательных полей). */
+function markFieldAsRequired(el: HTMLElement): void {
+  const parent = el.parentElement;
+  if (!parent) return;
+
+  // Идемпотентно — не дублируем
+  if (parent.querySelector(':scope > [data-rpa-required-mark]')) return;
+
+  const parentStyle = window.getComputedStyle(parent);
+  if (parentStyle.position === 'static') {
+    parent.style.position = 'relative';
+  }
+
+  const mark = document.createElement('span');
+  mark.setAttribute('data-rpa-required-mark', '');
+  mark.textContent = '*';
+  mark.style.cssText = [
+    'position:absolute',
+    'top:-4px',
+    'right:-4px',
+    'color:#dc2626',
+    'font-size:18px',
+    'font-weight:700',
+    'line-height:1',
+    'z-index:9999',
+    'pointer-events:none',
+    'text-shadow:0 0 2px #fff',
+  ].join(';');
+  parent.appendChild(mark);
+}
+
+/** Список обязательных полей по формам. */
+const REQUIRED_BY_FORM: Record<string, string[]> = {
+  intake: [
+    'patient.iin',
+    'patient.admissionDate',
+    'patient.department',
+    'visit.diagnosis',
+    'visit.complaints',
+    'visit.anamnesis',
+  ],
+  epicrisis: [
+    'epicrisis.finalDiagnosis',
+    'epicrisis.treatmentResults',
+  ],
+  diary: [
+    'diary.subjective',
+    'diary.objective',
+    'diary.assessment',
+    'diary.plan',
+  ],
+  diagnoses: [
+    'diagnoses.new.code',
+    'diagnoses.new.name',
+    'diagnoses.new.type',
+  ],
+  assignments: [
+    'assignments.new.type',
+    'assignments.new.name',
+    'assignments.new.dosage',
+    'assignments.new.frequency',
+  ],
+};
+
+/** Проставляет звёздочки всем обязательным полям на странице. */
+function applyRequiredMarks(): void {
+  for (const fields of Object.values(REQUIRED_BY_FORM)) {
+    for (const field of fields) {
+      const sel = DamumedFieldMap[field];
+      if (!sel) continue;
+      const el = document.querySelector<HTMLElement>(sel);
+      if (el) markFieldAsRequired(el);
+    }
+  }
+}
+
+// Применяем звёздочки при загрузке и наблюдаем за изменениями DOM
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', applyRequiredMarks);
+} else {
+  applyRequiredMarks();
+}
+
+// Наблюдаем за динамическими изменениями (SPA навигация)
+const requiredMarksObserver = new MutationObserver(() => {
+  applyRequiredMarks();
+});
+requiredMarksObserver.observe(document.body, { childList: true, subtree: true });
+
 /** Обработка навигации по вкладкам */
 async function handleNavigation(target: string): Promise<RpaResult> {
   console.log('[rpa] handleNavigation:', target);
@@ -410,8 +499,9 @@ async function handleNavigation(target: string): Promise<RpaResult> {
     if (elements.length > 0) {
       const element = elements[0];
       console.log('[rpa] Found tab element:', element, 'for term:', term);
+      const tabLabel = (element.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 80);
       (element as HTMLElement).click();
-      return { ok: true };
+      return { ok: true, data: { label: tabLabel } };
     }
   }
 
@@ -419,8 +509,9 @@ async function handleNavigation(target: string): Promise<RpaResult> {
   const routeElement = document.querySelector(`[data-rpa-route="${target}"]`);
   if (routeElement) {
     console.log('[rpa] Found element by data-rpa-route:', routeElement);
+    const tabLabel = (routeElement.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 80);
     (routeElement as HTMLElement).click();
-    return { ok: true };
+    return { ok: true, data: { label: tabLabel } };
   }
 
   return {
@@ -538,6 +629,19 @@ async function handleCommand(msg: BackgroundToContentMsg): Promise<RpaResult> {
           text: (el.textContent ?? '').trim().slice(0, 120),
         },
       };
+    }
+
+    case 'rpa:checkRequired': {
+      const required = REQUIRED_BY_FORM[msg.form] || [];
+      const missing: string[] = [];
+      for (const field of required) {
+        const sel = DamumedFieldMap[field];
+        if (!sel) continue;
+        const el = document.querySelector<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(sel);
+        const val = el?.value?.trim() || '';
+        if (!val) missing.push(field);
+      }
+      return { ok: true, data: { missing } };
     }
 
     default: {

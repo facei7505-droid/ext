@@ -51,6 +51,11 @@ export interface NavigateMsg {
   target: string;
 }
 
+export interface CheckRequiredMsg {
+  type: 'rpa:checkRequired';
+  form: RpaFormKey;
+}
+
 export type AgentVisualStatus = 'idle' | 'listening' | 'thinking' | 'filling' | 'speaking';
 
 export interface SetAgentStatusMsg {
@@ -73,7 +78,8 @@ export type BackgroundToContentMsg =
   | SpeakMsg
   | SetAgentStatusMsg
   | SearchAndClickMsg
-  | NavigateMsg;
+  | NavigateMsg
+  | CheckRequiredMsg;
 
 /* ================== content → background ================== */
 

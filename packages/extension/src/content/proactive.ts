@@ -55,10 +55,14 @@ export function initProactive(cb: ProactiveCallbacks = {}): ProactiveHandle {
   });
 
   // Переключение микрофона: любой активный режим → полный стоп; иначе — старт.
+  // Если микрофон был остановлен вручную, кнопка включает его снова.
   widget.onMicClick(() => {
     const s = voice.status;
-    if (s === 'listening' || s === 'speaking' || s === 'thinking' || s === 'filling') {
-      voice.cancelAll();
+    if (voice.isManuallyStopped) {
+      voice.resumeManually();
+      widget.setTranscript('');
+    } else if (s === 'listening' || s === 'speaking' || s === 'thinking' || s === 'filling') {
+      voice.stopManually();
       widget.setTranscript('');
     } else {
       voice.startListening();

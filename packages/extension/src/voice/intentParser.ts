@@ -104,11 +104,9 @@ const FIELD_NAME_MAP: Record<string, string> = {
   'температуру': 'visit.temperature',
   'температура тела': 'visit.temperature',
   'температур': 'visit.temperature',
-  'назначения': 'visit.recommendations',
   'назначения врача': 'visit.recommendations',
   'рекомендации': 'visit.recommendations',
   'лечение': 'visit.recommendations',
-  'лекарства': 'visit.recommendations',
   'терапия': 'visit.recommendations',
   // Выписной эпикриз (EpicrisisDamumed) - используется префикс epicrisis
   'окончательный диагноз': 'epicrisis.finalDiagnosis',
@@ -249,8 +247,11 @@ const TAB_NAME_MAP: Record<string, string> = {
   'диагностика': 'diagnoses',
   // Назначения
   'назначения': 'assignments',
+  'назначение': 'assignments',
   'лекарства': 'assignments',
+  'лекарство': 'assignments',
   'медикаменты': 'assignments',
+  'медикамент': 'assignments',
   'терапия': 'assignments',
   // Расписание
   'расписание': 'schedule',
@@ -432,10 +433,10 @@ export function parseIntent(transcript: string): ParsedIntent | ParsedIntent[] {
     };
   }
 
-  // Парсинг навигационных команд
+  // Парсинг навигационных команд (перед коротким форматом)
   const navMatch = text.match(/(?:открой|перейди к|перейди в|перейти к|перейти в|покажи|переключись на|зайди в)\s+(.+)/i);
-  if (navMatch) {
-    const targetText = navMatch[2].toLowerCase().trim();
+  if (navMatch && navMatch[1]) {
+    const targetText = navMatch[1].toLowerCase().trim();
     const normalizedTarget = targetText.replace(/ё/g, 'е');
 
     // Ищем соответствие в маппинге вкладок

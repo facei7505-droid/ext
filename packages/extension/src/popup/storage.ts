@@ -30,7 +30,7 @@ export interface LlmConfig {
 /** Дефолты для каждого провайдера. */
 export const PROVIDER_DEFAULTS: Record<LlmProvider, { baseUrl: string; model: string }> = {
   openai: { baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
-  groq:   { baseUrl: 'https://api.groq.com/openai/v1', model: 'llama-3.1-70b-versatile' },
+  groq:   { baseUrl: 'https://api.groq.com/openai/v1', model: 'llama-3.1-8b-instant' },
 };
 
 export async function loadLlmConfig(): Promise<LlmConfig> {
