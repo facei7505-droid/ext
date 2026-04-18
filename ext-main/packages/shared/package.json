@@ -1,0 +1,9 @@
+{
+  "name": "@healthtech-rpa/shared",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Общие типы и контракты для CRM-мокапа и Chrome Extension. Не собирается — импортируется как .ts через path-aliases.",
+  "main": "src/index.ts",
+  "types": "src/index.ts"
+}

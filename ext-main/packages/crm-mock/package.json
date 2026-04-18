@@ -1,0 +1,28 @@
+{
+  "name": "@healthtech-rpa/crm-mock",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Vue 3 SPA, имитирующая легаси-КМИС. Полигон для Chrome Extension RPA-агента.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc --noEmit && vite build",
+    "preview": "vite preview --port 4173",
+    "typecheck": "vue-tsc --noEmit"
+  },
+  "dependencies": {
+    "pinia": "^2.1.7",
+    "vue": "^3.4.21",
+    "vue-router": "^4.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.30",
+    "@vitejs/plugin-vue": "^5.0.4",
+    "autoprefixer": "^10.4.19",
+    "postcss": "^8.4.38",
+    "tailwindcss": "^3.4.3",
+    "typescript": "^5.4.3",
+    "vite": "^5.2.6",
+    "vue-tsc": "^2.0.7"
+  }
+}

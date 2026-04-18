@@ -1,0 +1,17 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Глобальный фон попапа — нейтральный, не отвлекает от КМИС в фоне. */
+html, body, #app {
+  width: 380px;
+  background: #f8fafc;
+  font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+}
+
+/* Скрыть нативный outline у переключателей — заменяем на свой ring. */
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: none;
+}
