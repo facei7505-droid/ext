@@ -94,6 +94,8 @@ export interface TranscriptMsg {
   target?: string;
   /** Для OPEN_TAB: URL для открытия */
   url?: string;
+  /** Для MULTI_EDIT: массив команд */
+  commands?: TranscriptMsg[];
 }
 
 export type ContentToBackgroundMsg =

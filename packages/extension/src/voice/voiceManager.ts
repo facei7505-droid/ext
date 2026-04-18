@@ -46,19 +46,31 @@ export class VoiceManager {
 
         // Перехватываем подтверждение, если есть ожидающий askConfirmation.
         if (this.pendingConfirmation) {
-          if (parsed.intent === 'CONFIRM') {
+          if (!Array.isArray(parsed) && parsed.intent === 'CONFIRM') {
             this.pendingConfirmation(true);
             this.pendingConfirmation = null;
             return;
           }
-          if (parsed.intent === 'CANCEL') {
+          if (!Array.isArray(parsed) && parsed.intent === 'CANCEL') {
             this.pendingConfirmation(false);
             this.pendingConfirmation = null;
             return;
           }
         }
 
-        this.emit('transcript', parsed);
+        // Если это массив интентов (MULTI_EDIT), отправляем как отдельные команды
+        if (Array.isArray(parsed)) {
+          // Отправляем MULTI_EDIT интент с массивом команд
+          const multiIntent: ParsedIntent = {
+            intent: 'MULTI_EDIT',
+            raw: parsed.map(p => p.raw).join(' '),
+            confidence: 0.7,
+            commands: parsed,
+          };
+          this.emit('transcript', multiIntent);
+        } else {
+          this.emit('transcript', parsed);
+        }
       } else {
         this.emit('interim', ev.transcript);
       }

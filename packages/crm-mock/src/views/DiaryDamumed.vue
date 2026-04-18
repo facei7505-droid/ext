@@ -25,7 +25,7 @@ const handleSubmit = () => {
         <h2>Дневниковая запись осмотра</h2>
       </div>
       <div class="panel-body">
-        <form @submit.prevent="handleSubmit">
+        <form @submit.prevent="handleSubmit" data-rpa-form="diary">
           <!-- Дата осмотра -->
           <div class="section-title">Дата осмотра</div>
           <div class="row form-group">

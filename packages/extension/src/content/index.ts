@@ -13,9 +13,9 @@ import {
   typeIntoElement,
   clickElement,
   findAndClickByText,
+  sleep,
 } from './domHelpers';
-import { waitForSelector } from './domObserver';
-import { fieldSelector, actionSelector } from '@/shared/selectors';
+import { fieldSelector, actionSelector, DamumedFieldMap } from '@/shared/selectors';
 import type {
   BackgroundToContentMsg,
   ContentReadyMsg,
@@ -23,6 +23,155 @@ import type {
   TranscriptMsg,
 } from '@/shared/messages';
 import { initProactive } from './proactive';
+
+/* -------------------- утилиты -------------------- */
+
+/** Ожидание появления элемента по селектору с таймаутом */
+async function waitForSelector(
+  selector: string,
+  { timeoutMs = 5000 }: { timeoutMs?: number } = {},
+): Promise<HTMLElement> {
+  const startTime = Date.now();
+  while (Date.now() - startTime < timeoutMs) {
+    const el = document.querySelector<HTMLElement>(selector);
+    if (el) return el;
+    await sleep(50);
+  }
+  throw new Error(`Element not found: ${selector} (timeout ${timeoutMs}ms)`);
+}
+
+/** Конвертирует значения select из русского в английский для Дамумед */
+function convertSelectValue(field: string, value: string): string {
+  const valueLower = value.toLowerCase().trim();
+
+  // Конвертация для отделения
+  if (field === 'patient.department') {
+    const departmentMap: Record<string, string> = {
+      'терапевтическое': 'therapeutic',
+      'неврологическое': 'neurology',
+      'детское': 'pediatric',
+    };
+    return departmentMap[valueLower] || value;
+  }
+
+  // Конвертация для давления: "120 на 80" → "120/80"
+  if (field === 'visit.bloodPressure') {
+    return value.replace(/\s+на\s+/i, '/').replace(/\s+/g, '/');
+  }
+
+  // Конвертация для группы инвалидности
+  if (field === 'epicrisis.disabilityGroup') {
+    const disabilityMap: Record<string, string> = {
+      'первая': '1',
+      'вторая': '2',
+      'третья': '3',
+      'нет': '0',
+      'без группы': '0',
+    };
+    return disabilityMap[valueLower] || value;
+  }
+
+  return value;
+}
+
+/** Парсит дату из различных форматов в формат YYYY-MM-DD */
+function parseDate(value: string): string {
+  const text = value.toLowerCase().trim();
+
+  // Если уже в формате YYYY-MM-DD, возвращаем как есть
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    return text;
+  }
+
+  // Если в формате DD.MM.YYYY или DD/MM/YYYY
+  const dotMatch = text.match(/(\d{1,2})[.\/](\d{1,2})[.\/](\d{4})/);
+  if (dotMatch) {
+    const [, day, month, year] = dotMatch;
+    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+  }
+
+  // Месяцы на русском
+  const months: Record<string, number> = {
+    'января': 0, 'январь': 0,
+    'февраля': 1, 'февраль': 1,
+    'марта': 2, 'март': 2,
+    'апреля': 3, 'апрель': 3,
+    'мая': 4,
+    'июня': 5, 'июнь': 5,
+    'июля': 6, 'июль': 6,
+    'августа': 7, 'август': 7,
+    'сентября': 8, 'сентябрь': 8,
+    'октября': 9, 'октябрь': 9,
+    'ноября': 10, 'ноябрь': 10,
+    'декабря': 11, 'декабрь': 11,
+  };
+
+  // Парсим форматы типа "15 июля 2026", "пятнадцатое июля 2026 года"
+  // Сначала пробуем с пробелами
+  const words = text.split(/\s+/);
+  let day: number | null = null;
+  let month: number | null = null;
+  let year: number | null = null;
+
+  for (const word of words) {
+    // Парсим день (число или текстовое число)
+    const numberWords: Record<string, number> = {
+      'первое': 1, 'второе': 2, 'третье': 3, 'четвертое': 4, 'пятое': 5,
+      'шестое': 6, 'седьмое': 7, 'восьмое': 8, 'девятое': 9, 'десятое': 10,
+      'одиннадцатое': 11, 'двенадцатое': 12, 'тринадцатое': 13, 'четырнадцатое': 14,
+      'пятнадцатое': 15, 'шестнадцатое': 16, 'семнадцатое': 17, 'восемнадцатое': 18,
+      'девятнадцатое': 19, 'двадцатое': 20, 'двадцать первое': 21, 'двадцать второе': 22,
+      'двадцать третье': 23, 'двадцать четвертое': 24, 'двадцать пятое': 25,
+      'двадцать шестое': 26, 'двадцать седьмое': 27, 'двадцать восьмое': 28,
+      'двадцать девятое': 29, 'тридцатое': 30, 'тридцать первое': 31,
+    };
+
+    if (numberWords[word]) {
+      day = numberWords[word];
+    } else if (/^\d{1,2}$/.test(word)) {
+      day = parseInt(word, 10);
+    }
+
+    // Парсим месяц
+    if (months[word] !== undefined) {
+      month = months[word];
+    }
+
+    // Парсим год
+    if (/^\d{4}$/.test(word)) {
+      year = parseInt(word, 10);
+    }
+  }
+
+  // Если не удалось с пробелами, пробуем без пробелов (например, "15апреля2026")
+  if (day === null || month === null || year === null) {
+    // Пробуем найти месяц в тексте
+    for (const [monthName, monthNum] of Object.entries(months)) {
+      if (text.includes(monthName)) {
+        month = monthNum;
+        // Извлекаем день и год из оставшегося текста
+        const remainingText = text.replace(monthName, '').replace(/\s/g, '');
+        const dayMatch = remainingText.match(/^(\d{1,2})/);
+        const yearMatch = remainingText.match(/(\d{4})$/);
+        if (dayMatch) day = parseInt(dayMatch[1], 10);
+        if (yearMatch) year = parseInt(yearMatch[1], 10);
+        break;
+      }
+    }
+  }
+
+  // Если год не указан, используем текущий год
+  if (year === null) {
+    year = new Date().getFullYear();
+  }
+
+  if (day !== null && month !== null && year !== null) {
+    return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  }
+
+  // Если не удалось распарсить, возвращаем исходное значение
+  return value;
+}
 
 /* -------------------- bootstrap -------------------- */
 
@@ -72,6 +221,14 @@ const proactive = initProactive({
       addValue: parsed.addValue,
       target: parsed.target,
       url: parsed.url,
+      commands: parsed.commands?.map(cmd => ({
+        type: 'rpa:transcript',
+        transcript: cmd.raw,
+        intent: cmd.intent,
+        confidence: cmd.confidence,
+        field: cmd.field,
+        value: cmd.value,
+      })),
     };
     chrome.runtime.sendMessage(msg).catch(() => { /* background asleep */ });
   },
@@ -101,10 +258,44 @@ async function handleCommand(msg: BackgroundToContentMsg): Promise<RpaResult> {
       return { ok: true, data: { route: getRpaRoute(), url: location.href } };
 
     case 'rpa:fillField': {
-      const selector = fieldSelector(msg.form, msg.field);
-      const el = await waitForSelector(selector).catch(() => null);
-      if (!el) return { ok: false, error: `field not found: ${msg.form}/${msg.field}`, code: 'NOT_FOUND' };
-      await typeIntoElement(el, msg.value, { human: msg.humanTyping ?? true });
+      console.log('[rpa] fillField:', { form: msg.form, field: msg.field, value: msg.value });
+      const startTime = Date.now();
+
+      // Сначала пробуем найти через data-rpa-field
+      let selector = fieldSelector(msg.form, msg.field);
+      console.log('[rpa] trying selector:', selector);
+      let el = await waitForSelector(selector, { timeoutMs: 1000 }).catch(() => null);
+
+      // Если не нашли, пробуем использовать DamumedFieldMap
+      if (!el && DamumedFieldMap[msg.field]) {
+        selector = DamumedFieldMap[msg.field];
+        console.log('[rpa] trying DamumedFieldMap selector:', selector);
+        el = document.querySelector(selector);
+      }
+
+      if (!el) {
+        console.error('[rpa] element not found for:', msg.field);
+        return { ok: false, error: `field not found: ${msg.form}/${msg.field}`, code: 'NOT_FOUND' };
+      }
+
+      console.log('[rpa] element found in', Date.now() - startTime, 'ms');
+
+      // Парсим дату если это поле типа date
+      let value = msg.value;
+      if (el instanceof HTMLInputElement && el.type === 'date') {
+        value = parseDate(value);
+        console.log('[rpa] parsed date:', value);
+      }
+
+      // Конвертируем значение для select элементов
+      if (el instanceof HTMLSelectElement) {
+        value = convertSelectValue(msg.field, value);
+        console.log('[rpa] converted select value:', value);
+      }
+
+      // Убираем humanTyping для ускорения
+      await typeIntoElement(el, value, { human: false });
+      console.log('[rpa] field filled in', Date.now() - startTime, 'ms total');
       return { ok: true };
     }
 
@@ -137,7 +328,11 @@ async function handleCommand(msg: BackgroundToContentMsg): Promise<RpaResult> {
     }
 
     case 'rpa:speak': {
-      await proactive.voice.speak(msg.text);
+      try {
+        await proactive.voice.speak(msg.text);
+      } catch (err) {
+        console.warn('[rpa] Speech synthesis error:', err);
+      }
       return { ok: true };
     }
 

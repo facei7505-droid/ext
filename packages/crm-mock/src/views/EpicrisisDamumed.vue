@@ -27,7 +27,7 @@ const handleSubmit = () => {
         <h2>Выписной эпикриз</h2>
       </div>
       <div class="panel-body">
-        <form @submit.prevent="handleSubmit">
+        <form @submit.prevent="handleSubmit" data-rpa-form="epicrisis">
           <!-- Окончательный диагноз -->
           <div class="section-title">Окончательный диагноз</div>
           <div class="row form-group">

@@ -20,6 +20,7 @@
 import type { TranscriptMsg, BackgroundToContentMsg, RpaResult } from '@/shared/messages';
 import { structureForm, LlmError } from '@/ai';
 import { mapVisitToCommands } from './visitMapper';
+import type { RpaFormKey } from '@/shared/selectors';
 
 export type FsmState =
   | 'IDLE'
@@ -82,7 +83,15 @@ export class Orchestrator {
 
   /** Обработать транскрипт от content-script. */
   async handleTranscript(msg: TranscriptMsg): Promise<RpaResult> {
+    console.log('[orchestrator] handleTranscript:', { intent: msg.intent, field: msg.field, value: msg.value, transcript: msg.transcript });
     const state = await this.getState();
+
+    // Если состояние застряло в FILLING_DOM или PROCESSING_LLM, принудительно сбрасываем в IDLE
+    if (state === 'FILLING_DOM' || state === 'PROCESSING_LLM') {
+      console.warn('[orchestrator] Force resetting state from', state, 'to IDLE');
+      await this.setState('IDLE');
+    }
+
     if (state !== 'IDLE' && state !== 'LISTENING') {
       console.warn('[orchestrator] transcript ignored, state=', state);
       return { ok: true };
@@ -95,6 +104,7 @@ export class Orchestrator {
 
     // Команды редактирования
     if (msg.intent === 'EDIT_FIELD' && msg.field && msg.value) {
+      console.log('[orchestrator] Processing EDIT_FIELD:', { field: msg.field, value: msg.value });
       return this.handleEditField(msg.field, msg.value);
     }
 
@@ -106,7 +116,6 @@ export class Orchestrator {
       return this.handleAddField(msg.addField, msg.addValue);
     }
 
-    // Новые команды
     if (msg.intent === 'CLEAR_ALL') {
       return this.handleClearAll();
     }
@@ -136,61 +145,91 @@ export class Orchestrator {
       return this.handleOpenTab(msg.url);
     }
 
+    // MULTI_EDIT → обрабатываем несколько команд последовательно
+    if (msg.intent === 'MULTI_EDIT' && msg.commands) {
+      console.log('[orchestrator] Handling MULTI_EDIT with commands:', msg.commands.length);
+      return this.handleMultiEdit(msg.commands);
+    }
+
     // DICTATION → отправляем в LLM для структуризацию
+    console.log('[orchestrator] Sending to LLM flow, intent:', msg.intent);
     return this.runLlmFlow(msg.transcript);
   }
 
   /* ──────────────────────── Обработка команд редактирования ──────────────────────── */
 
   private async handleEditField(field: string, value: string): Promise<RpaResult> {
-    await this.setState('FILLING_DOM', `Редактирование поля: ${field}`);
-    const r = await this.deps.sendToTab({
-      type: 'rpa:fillField',
-      form: 'intake',
-      field,
-      value,
-      humanTyping: true,
-    });
-    await this.deps.sendToTab({
-      type: 'rpa:speak',
-      text: r.ok ? `Поле ${field} изменено на ${value}` : `Ошибка изменения поля ${field}`,
-    }).catch(() => {});
-    await this.setState('IDLE');
-    return r;
+    try {
+      await this.setState('FILLING_DOM', `Редактирование поля: ${field}`);
+
+      // Определяем форму на основе имени поля
+      let form: RpaFormKey = 'intake';
+      if (field.startsWith('epicrisis.')) {
+        form = 'epicrisis';
+      } else if (field.startsWith('diary.')) {
+        form = 'diary';
+      } else if (field.startsWith('diagnoses.')) {
+        form = 'diagnoses';
+      } else if (field.startsWith('assignments.') || field.startsWith('schedule.')) {
+        form = 'assignments';
+      }
+
+      const r = await this.deps.sendToTab({
+        type: 'rpa:fillField',
+        form,
+        field,
+        value,
+        humanTyping: false,
+      });
+      await this.deps.sendToTab({
+        type: 'rpa:speak',
+        text: r.ok ? `Поле ${field} изменено на ${value}` : `Ошибка изменения поля ${field}`,
+      }).catch(() => {});
+      return r;
+    } finally {
+      // Гарантируем сброс состояния в IDLE даже при ошибке
+      await this.setState('IDLE');
+    }
   }
 
   private async handleDeleteField(field: string): Promise<RpaResult> {
-    await this.setState('FILLING_DOM', `Удаление поля: ${field}`);
-    const r = await this.deps.sendToTab({
-      type: 'rpa:fillField',
-      form: 'intake',
-      field,
-      value: '',
-      humanTyping: true,
-    });
-    await this.deps.sendToTab({
-      type: 'rpa:speak',
-      text: r.ok ? `Поле ${field} очищено` : `Ошибка очистки поля ${field}`,
-    }).catch(() => {});
-    await this.setState('IDLE');
-    return r;
+    try {
+      await this.setState('FILLING_DOM', `Удаление поля: ${field}`);
+      const r = await this.deps.sendToTab({
+        type: 'rpa:fillField',
+        form: 'intake',
+        field,
+        value: '',
+        humanTyping: false,
+      });
+      await this.deps.sendToTab({
+        type: 'rpa:speak',
+        text: r.ok ? `Поле ${field} очищено` : `Ошибка очистки поля ${field}`,
+      }).catch(() => {});
+      return r;
+    } finally {
+      await this.setState('IDLE');
+    }
   }
 
   private async handleAddField(field: string, value: string): Promise<RpaResult> {
-    await this.setState('FILLING_DOM', `Добавление в поле: ${field}`);
-    const r = await this.deps.sendToTab({
-      type: 'rpa:fillField',
-      form: 'intake',
-      field,
-      value,
-      humanTyping: true,
-    });
-    await this.deps.sendToTab({
-      type: 'rpa:speak',
-      text: r.ok ? `Добавлено в поле ${field}: ${value}` : `Ошибка добавления в поле ${field}`,
-    }).catch(() => {});
-    await this.setState('IDLE');
-    return r;
+    try {
+      await this.setState('FILLING_DOM', `Добавление в поле: ${field}`);
+      const r = await this.deps.sendToTab({
+        type: 'rpa:fillField',
+        form: 'intake',
+        field,
+        value,
+        humanTyping: false,
+      });
+      await this.deps.sendToTab({
+        type: 'rpa:speak',
+        text: r.ok ? `Добавлено в поле ${field}: ${value}` : `Ошибка добавления в поле ${field}`,
+      }).catch(() => {});
+      return r;
+    } finally {
+      await this.setState('IDLE');
+    }
   }
 
   private async handleClearAll(): Promise<RpaResult> {
@@ -207,9 +246,9 @@ export class Orchestrator {
     await this.setState('IDLE');
     await this.deps.sendToTab({
       type: 'rpa:speak',
-      text: 'Доступные поля: фамилия, имя, отчество, дата рождения, пол, телефон, жалобы, анамнез, давление, пульс, температура, диагноз, назначения',
+      text: 'Доступные поля: иин, дата поступления, отделение, диагноз, жалобы, анамнез, давление, пульс, температура, назначения',
     }).catch(() => {});
-    return { ok: true, data: { fields: ['фамилия', 'имя', 'отчество', 'дата рождения', 'пол', 'телефон', 'жалобы', 'анамнез', 'давление', 'пульс', 'температура', 'диагноз', 'назначения'] } };
+    return { ok: true, data: { fields: ['иин', 'дата поступления', 'отделение', 'диагноз', 'жалобы', 'анамнез', 'давление', 'пульс', 'температура', 'назначения'] } };
   }
 
   private async handleHelp(): Promise<RpaResult> {
@@ -256,6 +295,27 @@ export class Orchestrator {
       text: `Открытие вкладки на ${url} в разработке`,
     }).catch(() => {});
     return { ok: true, data: { opened: url } };
+  }
+
+  private async handleMultiEdit(commands: TranscriptMsg[]): Promise<RpaResult> {
+    await this.setState('FILLING_DOM', `Заполнение ${commands.length} полей`);
+    let filled = 0;
+    let failed = 0;
+
+    for (const cmd of commands) {
+      if (cmd.intent === 'EDIT_FIELD' && cmd.field && cmd.value) {
+        const r = await this.handleEditField(cmd.field, cmd.value);
+        if (r.ok) filled++;
+        else failed++;
+      }
+    }
+
+    await this.setState('IDLE', `Заполнено ${filled}/${commands.length} полей`);
+    await this.deps.sendToTab({
+      type: 'rpa:speak',
+      text: `Заполнено ${filled} из ${commands.length} полей`,
+    }).catch(() => {});
+    return { ok: true, data: { filled, failed } };
   }
 
   /* ──────────────────────── Внутренние flow ──────────────────────── */

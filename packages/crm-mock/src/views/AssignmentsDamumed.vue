@@ -44,7 +44,7 @@ const handleSubmit = () => {
         <h2>Назначения</h2>
       </div>
       <div class="panel-body">
-        <form @submit.prevent="handleSubmit">
+        <form @submit.prevent="handleSubmit" data-rpa-form="assignments">
           <!-- Добавление назначения -->
           <div class="section-title">Добавить назначение</div>
           <div class="row form-group">

@@ -94,7 +94,7 @@ const handleSubmit = () => {
         <h2>Первичный осмотр пациента</h2>
       </div>
       <div class="panel-body">
-        <form @submit.prevent="handleSubmit">
+        <form @submit.prevent="handleSubmit" data-rpa-form="intake">
           <!-- Пациент -->
           <div class="section-title">Данные пациента</div>
           <div class="row form-group">

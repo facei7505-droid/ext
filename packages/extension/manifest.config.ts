@@ -34,10 +34,12 @@ export default defineManifest({
         'http://127.0.0.1:5173/*',
         'http://localhost:5174/*',
         'http://127.0.0.1:5174/*',
+        // Damumed production domain (add when known)
+        // 'https://damumed.kz/*',
       ],
       js: ['src/content/index.ts'],
       run_at: 'document_idle',
-      all_frames: false,
+      all_frames: true,
       world: 'ISOLATED',
     },
   ],
