@@ -185,10 +185,39 @@ export class Orchestrator {
         type: 'rpa:speak',
         text: r.ok ? `Поле ${field} изменено на ${value}` : `Ошибка изменения поля ${field}`,
       }).catch(() => {});
+
+      // Проверяем, нужно ли предложить следующий шаг
+      if (r.ok) {
+        await this.checkAndSuggestNextStep(form);
+      }
+
       return r;
     } finally {
       // Гарантируем сброс состояния в IDLE даже при ошибке
       await this.setState('IDLE');
+    }
+  }
+
+  /** Проверяет состояние формы и предлагает следующий шаг если нужно */
+  private async checkAndSuggestNextStep(form: RpaFormKey): Promise<void> {
+    // Определяем предложения для каждой формы
+    const suggestions: Record<RpaFormKey, string> = {
+      'intake': 'Первичный осмотр заполнен. Сформировать расписание процедур для пациента?',
+      'epicrisis': 'Выписной эпикриз заполнен. Сохранить данные пациента?',
+      'diary': 'Дневниковая запись сохранена. Перейти к назначениям?',
+      'diagnoses': 'Диагноз добавлен. Добавить сопутствующие диагнозы?',
+      'assignments': 'Назначение добавлено. Добавить еще назначения?',
+    };
+
+    const suggestion = suggestions[form];
+    if (suggestion) {
+      // Задержка перед предложением
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      await this.deps.sendToTab({
+        type: 'rpa:speak',
+        text: suggestion,
+        silentAfter: true,
+      }).catch(() => {});
     }
   }
 
@@ -280,12 +309,18 @@ export class Orchestrator {
   }
 
   private async handleNavigate(target: string): Promise<RpaResult> {
-    await this.setState('IDLE');
+    await this.setState('PROCESSING_LLM', `Переход на ${target}`);
+    const r = await this.deps.sendToTab({
+      type: 'rpa:navigate',
+      target,
+    });
     await this.deps.sendToTab({
       type: 'rpa:speak',
-      text: `Переход на ${target} в разработке`,
+      text: r.ok ? `Переход на ${target} выполнен` : `Ошибка перехода на ${target}`,
+      silentAfter: true,
     }).catch(() => {});
-    return { ok: true, data: { navigated: target } };
+    await this.setState('IDLE');
+    return r;
   }
 
   private async handleOpenTab(url: string): Promise<RpaResult> {

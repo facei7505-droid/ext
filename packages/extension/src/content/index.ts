@@ -385,10 +385,58 @@ chrome.runtime.onMessage.addListener(
   },
 );
 
+/** Обработка навигации по вкладкам */
+async function handleNavigation(target: string): Promise<RpaResult> {
+  console.log('[rpa] handleNavigation:', target);
+
+  // Маппинг маршрутов на текст вкладок для поиска в DOM
+  const tabTextMap: Record<string, string[]> = {
+    'intake': ['первичный осмотр', 'первичный прием', 'осмотр', 'прием'],
+    'epicrisis': ['выписной эпикриз', 'эпикриз', 'выписка', 'заключение'],
+    'diary': ['дневниковая запись', 'дневник', 'запись'],
+    'diagnoses': ['диагнозы', 'диагностика'],
+    'assignments': ['назначения', 'лекарства', 'медикаменты'],
+    'schedule': ['расписание', 'график', 'процедуры'],
+  };
+
+  const searchTerms = tabTextMap[target] || [target];
+
+  // Ищем вкладки по тексту
+  for (const term of searchTerms) {
+    const elements = Array.from(document.querySelectorAll('a, button, [role="tab"], li')).filter(
+      (el) => el.textContent?.toLowerCase().includes(term.toLowerCase())
+    );
+
+    if (elements.length > 0) {
+      const element = elements[0];
+      console.log('[rpa] Found tab element:', element, 'for term:', term);
+      (element as HTMLElement).click();
+      return { ok: true };
+    }
+  }
+
+  // Если не нашли по тексту, пробуем найти по data-rpa-route
+  const routeElement = document.querySelector(`[data-rpa-route="${target}"]`);
+  if (routeElement) {
+    console.log('[rpa] Found element by data-rpa-route:', routeElement);
+    (routeElement as HTMLElement).click();
+    return { ok: true };
+  }
+
+  return {
+    ok: false,
+    error: `Tab not found for target: ${target}`,
+  };
+}
+
 async function handleCommand(msg: BackgroundToContentMsg): Promise<RpaResult> {
   switch (msg.type) {
     case 'rpa:ping':
       return { ok: true, data: { route: getRpaRoute(), url: location.href } };
+
+    case 'rpa:navigate': {
+      return handleNavigation(msg.target);
+    }
 
     case 'rpa:fillField': {
       console.log('[rpa] fillField:', { form: msg.form, field: msg.field, value: msg.value });

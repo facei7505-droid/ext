@@ -223,6 +223,42 @@ const FIELD_NAME_MAP: Record<string, string> = {
   'процедуры': 'schedule',
 };
 
+/** Маппинг русских названий вкладок на имена маршрутов */
+const TAB_NAME_MAP: Record<string, string> = {
+  // Первичный осмотр
+  'первичный прием': 'intake',
+  'первичный осмотр': 'intake',
+  'осмотр': 'intake',
+  'прием': 'intake',
+  'прием пациента': 'intake',
+  'ввод данных': 'intake',
+  // Выписной эпикриз
+  'выписной эпикриз': 'epicrisis',
+  'эпикриз': 'epicrisis',
+  'выписка': 'epicrisis',
+  'заключение': 'epicrisis',
+  'выписной': 'epicrisis',
+  // Дневниковая запись
+  'дневниковая запись': 'diary',
+  'дневник': 'diary',
+  'запись': 'diary',
+  'дневниковая': 'diary',
+  // Диагнозы
+  'диагнозы': 'diagnoses',
+  'диагноз': 'diagnoses',
+  'диагностика': 'diagnoses',
+  // Назначения
+  'назначения': 'assignments',
+  'лекарства': 'assignments',
+  'медикаменты': 'assignments',
+  'терапия': 'assignments',
+  // Расписание
+  'расписание': 'schedule',
+  'график': 'schedule',
+  'процедуры': 'schedule',
+  'процедур': 'schedule',
+};
+
 /** Нормализует русское название поля на английское имя поля формы. */
 function normalizeFieldName(fieldName: string): string {
   const normalized = fieldName.toLowerCase().trim();
@@ -394,6 +430,29 @@ export function parseIntent(transcript: string): ParsedIntent | ParsedIntent[] {
       confidence: 0.7,
       commands: multiCommands,
     };
+  }
+
+  // Парсинг навигационных команд
+  const navMatch = text.match(/(?:открой|перейди к|перейди в|перейти к|перейти в|покажи|переключись на|зайди в)\s+(.+)/i);
+  if (navMatch) {
+    const targetText = navMatch[2].toLowerCase().trim();
+    const normalizedTarget = targetText.replace(/ё/g, 'е');
+
+    // Ищем соответствие в маппинге вкладок
+    for (const [tabName, route] of Object.entries(TAB_NAME_MAP)) {
+      const normalizedTabName = tabName.replace(/ё/g, 'е');
+      if (normalizedTarget.includes(normalizedTabName) || normalizedTabName.includes(normalizedTarget)) {
+        console.log('[intentParser] Matched navigation command:', { target: targetText, tabName, route });
+        return {
+          intent: 'NAVIGATE',
+          raw: transcript,
+          confidence: 0.85,
+          target: route,
+        };
+      }
+    }
+
+    console.log('[intentParser] Navigation command matched but no tab found:', targetText);
   }
 
   // Парсинг команд редактирования

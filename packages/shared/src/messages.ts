@@ -46,6 +46,11 @@ export interface SpeakMsg {
   silentAfter?: boolean;
 }
 
+export interface NavigateMsg {
+  type: 'rpa:navigate';
+  target: string;
+}
+
 export type AgentVisualStatus = 'idle' | 'listening' | 'thinking' | 'filling' | 'speaking';
 
 export interface SetAgentStatusMsg {
@@ -67,7 +72,8 @@ export type BackgroundToContentMsg =
   | PingMsg
   | SpeakMsg
   | SetAgentStatusMsg
-  | SearchAndClickMsg;
+  | SearchAndClickMsg
+  | NavigateMsg;
 
 /* ================== content → background ================== */
 
