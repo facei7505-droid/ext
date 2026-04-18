@@ -367,15 +367,37 @@ const proactive = initProactive({
   },
 });
 
-// Мост страница→TTS: страница диспатчит CustomEvent('rpa:tts-request', { detail: { text } })
-// — расширение озвучит текст голосом агента.
+// Мост страница→TTS: страница может отправить запрос на озвучку двумя способами:
+//   1. CustomEvent('rpa:tts-request', { detail: { text } })
+//   2. window.postMessage({ __rpa_tts: true, text }, '*')   (гарантированно работает через isolated world)
+let _lastTtsText = '';
+let _lastTtsAt = 0;
+function ttsSpeak(text: string | undefined): void {
+  const trimmed = text?.trim();
+  if (!trimmed) return;
+  // Дедуп: CustomEvent и postMessage могут прийти одновременно от страницы.
+  const now = Date.now();
+  if (trimmed === _lastTtsText && now - _lastTtsAt < 500) {
+    console.log('[rpa] TTS bridge dedup skip');
+    return;
+  }
+  _lastTtsText = trimmed;
+  _lastTtsAt = now;
+  console.log('[rpa] TTS bridge received:', { text: trimmed, status: proactive.voice.status });
+  proactive.voice.speak(trimmed)
+    .then(() => console.log('[rpa] TTS bridge done'))
+    .catch((err) => console.warn('[rpa] TTS bridge error:', err));
+}
+
 window.addEventListener('rpa:tts-request', (ev) => {
-  const detail = (ev as CustomEvent<{ text?: string }>).detail;
-  const text = detail?.text?.trim();
-  if (!text) return;
-  proactive.voice.speak(text).catch((err) => {
-    console.warn('[rpa] TTS bridge error:', err);
-  });
+  ttsSpeak((ev as CustomEvent<{ text?: string }>).detail?.text);
+});
+
+window.addEventListener('message', (ev) => {
+  if (ev.source !== window) return;
+  const data = ev.data as { __rpa_tts?: boolean; text?: string } | null;
+  if (!data || !data.__rpa_tts) return;
+  ttsSpeak(data.text);
 });
 
 /* -------------------- команды -------------------- */

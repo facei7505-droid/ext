@@ -412,19 +412,21 @@ export class Orchestrator {
     // Небольшая задержка на переключение страницы
     await new Promise((r) => setTimeout(r, 400));
 
-    // Триггерим кнопку автогенерации расписания
+    // Триггерим кнопку автогенерации расписания.
+    // Сам компонент SmartScheduleSection озвучит саммари + предложит следующие шаги
+    // через CustomEvent('rpa:tts-request') — нам озвучивать не нужно.
     const r = await this.deps.sendToTab({
       type: 'rpa:clickAction',
       action: 'generateSchedule',
     });
 
-    await this.deps.sendToTab({
-      type: 'rpa:speak',
-      text: r.ok
-        ? 'Расписание сгенерировано на 9 рабочих дней.'
-        : 'Не удалось сгенерировать расписание. Проверьте назначенные процедуры.',
-      silentAfter: true,
-    }).catch(() => {});
+    if (!r.ok) {
+      await this.deps.sendToTab({
+        type: 'rpa:speak',
+        text: 'Не удалось запустить генерацию расписания. Откройте первичный осмотр.',
+        silentAfter: true,
+      }).catch(() => {});
+    }
 
     await this.setState('IDLE');
     return r;

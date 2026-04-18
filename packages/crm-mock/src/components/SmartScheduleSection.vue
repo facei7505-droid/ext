@@ -121,7 +121,11 @@ const procedureName = (id: string): string => {
 
 /** Попросить расширение озвучить фразу голосом агента. */
 const speak = (text: string) => {
+  console.log('[SmartSchedule] speak →', text);
+  // Дублируем два способа — CustomEvent и postMessage — чтобы
+  // гарантированно достучаться до content script (isolated world).
   window.dispatchEvent(new CustomEvent('rpa:tts-request', { detail: { text } }));
+  window.postMessage({ __rpa_tts: true, text }, '*');
 };
 
 const handleGenerate = () => {
@@ -145,13 +149,21 @@ const handleGenerate = () => {
     endDate.value = result.dayDates[result.dayDates.length - 1].date;
   }
 
+  const nextSteps =
+    'Что сделать дальше? Могу сохранить осмотр, перейти к назначениям ' +
+    'или изменить количество сеансов. Скажите команду.';
+
   if (result.unplaced.length > 0) {
     speak(
       `Расписание сгенерировано. Размещено ${result.slots.length} процедур. ` +
-        `Не удалось разместить ${result.unplaced.length} сеансов.`,
+        `Не удалось разместить ${result.unplaced.length} сеансов. ` +
+        `Можно уменьшить количество сеансов или перейти к назначениям. ${nextSteps}`,
     );
   } else {
-    speak(`Расписание сгенерировано на 9 рабочих дней. Всего ${result.slots.length} процедур.`);
+    speak(
+      `Расписание сгенерировано на 9 рабочих дней. Всего ${result.slots.length} процедур. ` +
+        nextSteps,
+    );
   }
 };
 </script>
