@@ -132,12 +132,13 @@ export class Orchestrator {
   /** Обработать транскрипт от content-script. */
   async handleTranscript(msg: TranscriptMsg): Promise<RpaResult> {
     console.log('[orchestrator] handleTranscript:', { intent: msg.intent, field: msg.field, value: msg.value, transcript: msg.transcript });
-    const state = await this.getState();
+    let state = await this.getState();
 
     // Если состояние застряло в FILLING_DOM или PROCESSING_LLM, принудительно сбрасываем в IDLE
     if (state === 'FILLING_DOM' || state === 'PROCESSING_LLM') {
       console.warn('[orchestrator] Force resetting state from', state, 'to IDLE');
       await this.setState('IDLE');
+      state = 'IDLE'; // Сразу обновляем локальную переменную
     }
 
     if (state !== 'IDLE' && state !== 'LISTENING') {

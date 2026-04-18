@@ -342,6 +342,7 @@ console.info('[rpa] content script loaded at', location.href);
 // Монтируем виджет + VoiceManager + FormWatcher один раз на страницу.
 const proactive = initProactive({
   onFinalTranscript: (parsed) => {
+    console.log('[rpa] Sending transcript with parsed:', parsed);
     const msg: TranscriptMsg = {
       type: 'rpa:transcript',
       transcript: parsed.raw,
@@ -366,6 +367,7 @@ const proactive = initProactive({
         value: cmd.value,
       })),
     };
+    console.log('[rpa] Sending TranscriptMsg:', msg);
     chrome.runtime.sendMessage(msg).catch(() => { /* background asleep */ });
   },
 });
