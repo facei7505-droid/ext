@@ -202,14 +202,19 @@ export function clickElement(el: HTMLElement): void {
   const opts = { bubbles: true, cancelable: true, view: window } as const;
   el.dispatchEvent(new MouseEvent('mousedown', opts));
   el.dispatchEvent(new MouseEvent('mouseup', opts));
-  el.dispatchEvent(new MouseEvent('click', opts));
+  // Используем нативный el.click() — он сам диспатчит 'click' с правильным
+  // trusted-флагом. Ранее вдобавок был dispatchEvent(new MouseEvent('click')),
+  // что давало ДВОЙНОЙ клик — Vue/React обработчик срабатывал дважды,
+  // и toggle-кнопки возвращались в исходное состояние.
   if (typeof (el as HTMLButtonElement).click === 'function') {
     try {
       (el as HTMLButtonElement).click();
+      return;
     } catch {
-      /* ignored */
+      /* fallback to synthetic event */
     }
   }
+  el.dispatchEvent(new MouseEvent('click', opts));
 }
 
 /* =========================================================================

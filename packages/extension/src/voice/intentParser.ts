@@ -12,7 +12,7 @@
  * Все команды (заполни, сохрани, очисти) обрабатываются через LLM.
  */
 
-export type Intent = 'DICTATION' | 'CONFIRM' | 'CANCEL' | 'EDIT_FIELD' | 'DELETE_FIELD' | 'ADD_FIELD' | 'CLEAR_ALL' | 'SHOW_FIELDS' | 'HELP' | 'REPEAT' | 'SAVE' | 'NAVIGATE' | 'OPEN_TAB' | 'MULTI_EDIT' | 'GENERATE_SCHEDULE';
+export type Intent = 'DICTATION' | 'CONFIRM' | 'CANCEL' | 'EDIT_FIELD' | 'DELETE_FIELD' | 'ADD_FIELD' | 'CLEAR_ALL' | 'SHOW_FIELDS' | 'HELP' | 'REPEAT' | 'SAVE' | 'NAVIGATE' | 'OPEN_TAB' | 'MULTI_EDIT' | 'GENERATE_SCHEDULE' | 'MARK_COMPLETED';
 
 export interface ParsedIntent {
   intent: Intent;
@@ -32,6 +32,10 @@ export interface ParsedIntent {
   url?: string;
   /** Для нескольких команд: массив команд */
   commands?: ParsedIntent[];
+  /** Для MARK_COMPLETED: идентификатор процедуры (lfk, massage, psychology…) */
+  procedure?: string;
+  /** Для MARK_COMPLETED: опциональный короткий дневник процедуры */
+  diary?: string;
 }
 
 const CONFIRM_KEYWORDS = [
@@ -256,8 +260,38 @@ const TAB_NAME_MAP: Record<string, string> = {
   // Расписание
   'расписание': 'schedule',
   'график': 'schedule',
-  'процедуры': 'schedule',
-  'процедур': 'schedule',
+  // Журнал выполнения процедур
+  'журнал процедур': 'services',
+  'журнал': 'services',
+  'выполнение': 'services',
+  'выполнение процедур': 'services',
+  'выполнение услуг': 'services',
+  'услуги': 'services',
+  'журнал услуг': 'services',
+  // 'процедуры' → services (по умолчанию теперь журнал, расписание триггерится словом "расписание")
+  'процедуры': 'services',
+  'процедур': 'services',
+};
+
+/** Маппинг русских названий процедур → id для журнала услуг. */
+const PROCEDURE_NAME_MAP: Record<string, string> = {
+  'лфк': 'lfk',
+  'лечебная физкультура': 'lfk',
+  'физкультура': 'lfk',
+  'зарядка': 'lfk',
+  'массаж': 'massage',
+  'массажа': 'massage',
+  'массажиста': 'massage',
+  'психолог': 'psychology',
+  'психолога': 'psychology',
+  'психология': 'psychology',
+  'психологическая процедура': 'psychology',
+  'физиотерапия': 'physiotherapy',
+  'физиотерапию': 'physiotherapy',
+  'физио': 'physiotherapy',
+  'логопед': 'speech',
+  'логопеда': 'speech',
+  'речевая терапия': 'speech',
 };
 
 /** Нормализует русское название поля на английское имя поля формы. */
@@ -431,6 +465,56 @@ export function parseIntent(transcript: string): ParsedIntent | ParsedIntent[] {
       confidence: 0.7,
       commands: multiCommands,
     };
+  }
+
+  // Парсинг отметки выполнения процедур (Модуль 4: Тайм-менеджмент)
+  // 1. "<процедура> выполнен(а/о) [, <короткий дневник>]"
+  // 2. "отметь <процедура> как выполненн(ую/ый/ое) [, <дневник>]"
+  // 3. "<процедура> завершен(а/о)"
+  const sortedProcNames = Object.keys(PROCEDURE_NAME_MAP).sort((a, b) => b.length - a.length);
+  // NB: JS \w не захватывает кириллицу, поэтому используем [а-яё]* для суффиксов.
+  const DONE = '(?:выполнен|завершен|сделан|закончен|готов)[а-яё]*';
+  console.log('[intentParser] Checking MARK_COMPLETED patterns against text:', JSON.stringify(text));
+  for (const procName of sortedProcNames) {
+    const escaped = procName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const patterns: RegExp[] = [
+      new RegExp(`(?:отметь|отметить|поставь)\\s+${escaped}\\s+(?:как\\s+)?${DONE}(?:[\\s,\\-:—.]+(.+))?$`, 'i'),
+      new RegExp(`^${escaped}\\s+${DONE}(?:[\\s,\\-:—.]+(.+))?$`, 'i'),
+      new RegExp(`${DONE}\\s+${escaped}(?:[\\s,\\-:—.]+(.+))?$`, 'i'),
+    ];
+    for (const re of patterns) {
+      const m = text.match(re);
+      if (m) {
+        const procId = PROCEDURE_NAME_MAP[procName];
+        const diary = (m[1] || '').trim();
+        console.log('[intentParser] Matched MARK_COMPLETED:', { procedure: procId, diary });
+        return {
+          intent: 'MARK_COMPLETED',
+          raw: transcript,
+          confidence: 0.9,
+          procedure: procId,
+          diary: diary || undefined,
+        };
+      }
+    }
+  }
+
+  // "запиши в дневник <процедура>: <текст>" / "дневник <процедура> <текст>"
+  const diaryMatch = text.match(/(?:запиши\s+в\s+дневник|дневник(?:а|е)?)\s+([а-яё]+)(?:[\s,:\-—]+)(.+)/i);
+  if (diaryMatch) {
+    const procKey = diaryMatch[1].toLowerCase();
+    const diaryText = diaryMatch[2].trim();
+    if (PROCEDURE_NAME_MAP[procKey]) {
+      const procId = PROCEDURE_NAME_MAP[procKey];
+      console.log('[intentParser] Matched diary-only MARK_COMPLETED:', { procedure: procId, diary: diaryText });
+      return {
+        intent: 'MARK_COMPLETED',
+        raw: transcript,
+        confidence: 0.85,
+        procedure: procId,
+        diary: diaryText,
+      };
+    }
   }
 
   // Парсинг команды автогенерации расписания

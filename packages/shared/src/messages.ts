@@ -108,6 +108,10 @@ export interface TranscriptMsg {
   url?: string;
   /** Для MULTI_EDIT: массив команд */
   commands?: TranscriptMsg[];
+  /** Для MARK_COMPLETED: идентификатор процедуры. */
+  procedure?: string;
+  /** Для MARK_COMPLETED: опциональный короткий дневник. */
+  diary?: string;
 }
 
 export type ContentToBackgroundMsg =

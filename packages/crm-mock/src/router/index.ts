@@ -56,6 +56,12 @@ const routes: RouteRecordRaw[] = [
     meta: { title: 'Назначения (Дамумед)', rpaRoute: 'assignments' },
   },
   {
+    path: '/services-damumed',
+    name: 'services-damumed',
+    component: () => import('@/views/ServiceExecutionDamumed.vue'),
+    meta: { title: 'Журнал процедур (Дамумед)', rpaRoute: 'services' },
+  },
+  {
     path: '/schedule-damumed',
     name: 'schedule-damumed',
     component: () => import('@/views/ScheduleDamumed.vue'),

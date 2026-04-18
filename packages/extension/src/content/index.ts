@@ -354,6 +354,8 @@ const proactive = initProactive({
       addValue: parsed.addValue,
       target: parsed.target,
       url: parsed.url,
+      procedure: parsed.procedure,
+      diary: parsed.diary,
       commands: parsed.commands?.map(cmd => ({
         type: 'rpa:transcript',
         transcript: cmd.raw,
@@ -518,7 +520,8 @@ async function handleNavigation(target: string): Promise<RpaResult> {
     'diary': ['дневниковая запись', 'дневник', 'запись'],
     'diagnoses': ['диагнозы', 'диагностика'],
     'assignments': ['назначения', 'лекарства', 'медикаменты'],
-    'schedule': ['умное расписание', 'расписание', 'график', 'процедуры'],
+    'schedule': ['умное расписание', 'расписание', 'график'],
+    'services': ['журнал процедур', 'журнал', 'выполнение', 'журнал услуг'],
   };
 
   const searchTerms = tabTextMap[target] || [target];

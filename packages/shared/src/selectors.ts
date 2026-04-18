@@ -14,6 +14,7 @@ export const RpaRoutes = {
   intake: 'intake',
   epicrisis: 'epicrisis',
   schedule: 'schedule',
+  services: 'services',
 } as const;
 export type RpaRouteKey = (typeof RpaRoutes)[keyof typeof RpaRoutes];
 
@@ -23,6 +24,7 @@ export const RpaForms = {
   diary: 'diary',
   diagnoses: 'diagnoses',
   assignments: 'assignments',
+  services: 'services',
 } as const;
 export type RpaFormKey = (typeof RpaForms)[keyof typeof RpaForms];
 
@@ -38,12 +40,17 @@ export type RpaActionKey = (typeof RpaActions)[keyof typeof RpaActions];
 
 /** CSS-селектор поля внутри формы. */
 export function fieldSelector(form: RpaFormKey, field: string): string {
-  return `[data-rpa-form="${form}"] [data-rpa-field="${CSS.escape(field)}"]`;
+  const safe = field.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  return `[data-rpa-form="${form}"] [data-rpa-field="${safe}"]`;
 }
 
 /** CSS-селектор действия (кнопки). */
 export function actionSelector(action: string): string {
-  return `[data-rpa-action="${CSS.escape(action)}"]`;
+  // NB: CSS.escape для ':' выдаёт '\3A ' — это валидно, но в некоторых движках
+  // строка селектора интерпретируется иначе. Для attribute-value достаточно
+  // экранировать обратный слэш и двойную кавычку.
+  const safe = action.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  return `[data-rpa-action="${safe}"]`;
 }
 
 /** CSS-селектор формы. */

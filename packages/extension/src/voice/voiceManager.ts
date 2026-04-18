@@ -96,6 +96,12 @@ export class VoiceManager {
     } else {
       this.emit('transcript', parsed);
     }
+
+    // Визуально переключаем виджет в "Думаю" чтобы врач видел что команда принята
+    // и обрабатывается. Оркестратор затем переведёт в filling/idle по ходу работы.
+    if (this._status === 'listening') {
+      this.setStatus('thinking');
+    }
   }
 
   private resetSilenceTimer(): void {

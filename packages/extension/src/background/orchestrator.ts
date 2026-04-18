@@ -197,6 +197,10 @@ export class Orchestrator {
       return this.handleGenerateSchedule();
     }
 
+    if (msg.intent === 'MARK_COMPLETED' && msg.procedure) {
+      return this.handleMarkCompleted(msg.procedure, msg.diary);
+    }
+
     // MULTI_EDIT → обрабатываем несколько команд последовательно
     if (msg.intent === 'MULTI_EDIT' && msg.commands) {
       console.log('[orchestrator] Handling MULTI_EDIT with commands:', msg.commands.length);
@@ -282,6 +286,7 @@ export class Orchestrator {
       'diary': 'Дневниковая запись сохранена. Перейти к назначениям?',
       'diagnoses': 'Диагноз добавлен. Добавить сопутствующие диагнозы?',
       'assignments': 'Назначение добавлено. Добавить еще назначения?',
+      'services': 'Журнал процедур обновлён.',
     };
 
     const suggestion = suggestions[form];
@@ -430,6 +435,73 @@ export class Orchestrator {
 
     await this.setState('IDLE');
     return r;
+  }
+
+  /**
+   * Модуль 4: Тайм-менеджмент статусов.
+   * Отмечает процедуру как выполненную в журнале услуг и при наличии
+   * дневника — вписывает комментарий. Реальный таймстамп проставляет
+   * сам компонент ServiceExecutionDamumed в момент клика.
+   */
+  private async handleMarkCompleted(procedure: string, diary?: string): Promise<RpaResult> {
+    const PROC_LABEL: Record<string, string> = {
+      lfk: 'ЛФК',
+      massage: 'Массаж',
+      psychology: 'Психолог',
+      physiotherapy: 'Физиотерапия',
+      speech: 'Логопед',
+    };
+    const label = PROC_LABEL[procedure] || procedure;
+
+    await this.setState('FILLING_DOM', `Отметка "${label}" как выполненной`);
+
+    // Переходим в журнал процедур
+    await this.deps.sendToTab({ type: 'rpa:navigate', target: 'services' }).catch(() => {});
+    await new Promise((r) => setTimeout(r, 500));
+
+    // Ждём появления кнопки статуса (Vue монтирует страницу не мгновенно)
+    const selector = `[data-rpa-action="markCompleted:${procedure}"]`;
+    await this.deps.sendToTab({
+      type: 'rpa:waitFor',
+      selector,
+      timeoutMs: 2500,
+    }).catch(() => {});
+
+    // Кликаем на кнопку статуса — компонент проставит timestamp сам
+    const clickRes = await this.deps.sendToTab({
+      type: 'rpa:clickAction',
+      action: `markCompleted:${procedure}`,
+    });
+
+    if (!clickRes.ok) {
+      await this.deps.sendToTab({
+        type: 'rpa:speak',
+        text: `Не нашёл процедуру ${label} в журнале. Откройте журнал процедур.`,
+        silentAfter: true,
+      }).catch(() => {});
+      await this.setState('IDLE');
+      return clickRes;
+    }
+
+    // Дневник — если врач сразу продиктовал комментарий
+    if (diary && diary.length > 0) {
+      await new Promise((r) => setTimeout(r, 150));
+      await this.deps.sendToTab({
+        type: 'rpa:fillField',
+        form: 'services' as RpaFormKey,
+        field: `service.${procedure}.diary`,
+        value: diary,
+      }).catch(() => {});
+      await this.deps.sendToTab({
+        type: 'rpa:speak',
+        text: `${label} отмечена как выполненная. Дневник записан.`,
+        silentAfter: true,
+      }).catch(() => {});
+    }
+    // Если дневник не продиктован — компонент сам озвучил приглашение.
+
+    await this.setState('IDLE');
+    return { ok: true };
   }
 
   private async handleOpenTab(url: string): Promise<RpaResult> {

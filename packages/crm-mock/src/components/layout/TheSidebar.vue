@@ -11,6 +11,7 @@ const items = [
   { to: '/diary-damumed', label: 'Дневниковая запись', action: 'nav:diary', route: 'diary' },
   { to: '/diagnoses-damumed', label: 'Диагнозы', action: 'nav:diagnoses', route: 'diagnoses' },
   { to: '/assignments-damumed', label: 'Назначения', action: 'nav:assignments', route: 'assignments' },
+  { to: '/services-damumed', label: 'Журнал процедур', action: 'nav:services', route: 'services' },
 ] as const;
 </script>
 
