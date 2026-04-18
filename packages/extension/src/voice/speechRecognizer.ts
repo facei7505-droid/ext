@@ -131,6 +131,21 @@ export class SpeechRecognizer {
     }
   }
 
+  /**
+   * Прервать текущую сессию движка и сразу перезапустить.
+   * Используется после ручного flush interim: чтобы движок не
+   * выдал повторный final по уже отправленному тексту.
+   */
+  restartSession(): void {
+    if (!this._listening) return;
+    try {
+      this.recognition?.abort();
+    } catch {
+      /* ignore */
+    }
+    // onend сработает и запустит перезапуск через _restartTimer
+  }
+
   /** Полная очистка. */
   destroy(): void {
     this.stop();

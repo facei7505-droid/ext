@@ -28,6 +28,9 @@ export interface VoiceManagerEvents {
 type EventKey = keyof VoiceManagerEvents;
 type EventHandler<K extends EventKey> = VoiceManagerEvents[K];
 
+/** Пауза (мс), после которой накопленный interim автоматически отправляется. */
+const SILENCE_AUTO_SEND_MS = 1800;
+
 export class VoiceManager {
   private recognizer: SpeechRecognizer;
   private synthesizer: SpeechSynthesizer;
@@ -36,6 +39,10 @@ export class VoiceManager {
   /** Резолвер для askConfirmation() — ожидает следующий CONFIRM/CANCEL. */
   private pendingConfirmation: ((result: boolean) => void) | null = null;
   private _manuallyStopped: boolean = false;
+  /** Последний interim-транскрипт (ещё не отправленный как final). */
+  private _interimBuffer: string = '';
+  /** Таймер автоотправки при паузе. */
+  private _silenceTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
     this.recognizer = new SpeechRecognizer();
@@ -43,41 +50,87 @@ export class VoiceManager {
 
     this.recognizer.onResult((ev: RecognizerEvent) => {
       if (ev.isFinal) {
-        const parsed = parseIntent(ev.transcript);
-
-        // Перехватываем подтверждение, если есть ожидающий askConfirmation.
-        if (this.pendingConfirmation) {
-          if (!Array.isArray(parsed) && parsed.intent === 'CONFIRM') {
-            this.pendingConfirmation(true);
-            this.pendingConfirmation = null;
-            return;
-          }
-          if (!Array.isArray(parsed) && parsed.intent === 'CANCEL') {
-            this.pendingConfirmation(false);
-            this.pendingConfirmation = null;
-            return;
-          }
-        }
-
-        // Если это массив интентов (MULTI_EDIT), отправляем как отдельные команды
-        if (Array.isArray(parsed)) {
-          // Отправляем MULTI_EDIT интент с массивом команд
-          const multiIntent: ParsedIntent = {
-            intent: 'MULTI_EDIT',
-            raw: parsed.map(p => p.raw).join(' '),
-            confidence: 0.7,
-            commands: parsed,
-          };
-          this.emit('transcript', multiIntent);
-        } else {
-          this.emit('transcript', parsed);
-        }
+        // Движок сам финализировал — чистим interim-буфер и таймер паузы.
+        this._interimBuffer = '';
+        this.clearSilenceTimer();
+        this.handleFinalTranscript(ev.transcript);
       } else {
+        // Обновляем interim-буфер и перезапускаем таймер паузы.
+        this._interimBuffer = ev.transcript;
         this.emit('interim', ev.transcript);
+        this.resetSilenceTimer();
       }
     });
 
     this.recognizer.onError((err) => this.emit('error', err));
+  }
+
+  /** Обработка финального транскрипта (из движка или ручной flush). */
+  private handleFinalTranscript(transcript: string): void {
+    const text = transcript.trim();
+    if (!text) return;
+
+    const parsed = parseIntent(text);
+
+    if (this.pendingConfirmation) {
+      if (!Array.isArray(parsed) && parsed.intent === 'CONFIRM') {
+        this.pendingConfirmation(true);
+        this.pendingConfirmation = null;
+        return;
+      }
+      if (!Array.isArray(parsed) && parsed.intent === 'CANCEL') {
+        this.pendingConfirmation(false);
+        this.pendingConfirmation = null;
+        return;
+      }
+    }
+
+    if (Array.isArray(parsed)) {
+      const multiIntent: ParsedIntent = {
+        intent: 'MULTI_EDIT',
+        raw: parsed.map((p) => p.raw).join(' '),
+        confidence: 0.7,
+        commands: parsed,
+      };
+      this.emit('transcript', multiIntent);
+    } else {
+      this.emit('transcript', parsed);
+    }
+  }
+
+  private resetSilenceTimer(): void {
+    this.clearSilenceTimer();
+    this._silenceTimer = setTimeout(() => {
+      this.flushInterim();
+    }, SILENCE_AUTO_SEND_MS);
+  }
+
+  private clearSilenceTimer(): void {
+    if (this._silenceTimer !== null) {
+      clearTimeout(this._silenceTimer);
+      this._silenceTimer = null;
+    }
+  }
+
+  /**
+   * Принудительно отправить накопленный interim-транскрипт как финальный.
+   * Вызывается по кнопке "Отправить" и по таймеру тишины.
+   */
+  flushInterim(): void {
+    const buffered = this._interimBuffer.trim();
+    this.clearSilenceTimer();
+    if (!buffered) return;
+    this._interimBuffer = '';
+    this.handleFinalTranscript(buffered);
+    // Прерываем текущую сессию движка, чтобы не получить дубль финального
+    if (this._status === 'listening' && !this._manuallyStopped) {
+      this.recognizer.restartSession();
+    }
+  }
+
+  /** Есть ли сейчас накопленный interim-текст. */
+  get hasPendingInterim(): boolean {
+    return this._interimBuffer.trim().length > 0;
   }
 
   get status(): AgentStatus {

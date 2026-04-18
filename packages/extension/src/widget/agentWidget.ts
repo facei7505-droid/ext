@@ -81,6 +81,25 @@ const WIDGET_STYLES = /* css */ `
   }
   .mic[data-status="listening"]:hover { background: #b91c1c; }
 
+  /* Кнопка отправки — показывается только когда есть накопленный текст */
+  .send-btn {
+    width: 40px;
+    height: 40px;
+    flex: 0 0 40px;
+    border-radius: 50%;
+    border: none;
+    cursor: pointer;
+    background: #16a34a;
+    color: #fff;
+    display: none;
+    place-items: center;
+    transition: background 0.2s ease, transform 0.15s ease;
+  }
+  .send-btn:hover { background: #15803d; }
+  .send-btn:active { transform: scale(0.96); }
+  .shell[data-has-pending="true"] .send-btn { display: grid; }
+  .icon-send { width: 18px; height: 18px; fill: currentColor; }
+
   /* Пульсация во время прослушивания */
   .mic[data-status="listening"]::before,
   .mic[data-status="listening"]::after {
@@ -160,12 +179,14 @@ export class AgentStatusWidget {
   private hostEl: HTMLElement | null = null;
   private shadow: ShadowRoot | null = null;
   private micEl: HTMLButtonElement | null = null;
+  private sendEl: HTMLButtonElement | null = null;
   private statusEl: HTMLElement | null = null;
   private transcriptEl: HTMLElement | null = null;
   private shellEl: HTMLElement | null = null;
   private iconSlot: HTMLElement | null = null;
   private currentStatus: AgentStatus = 'idle';
   private micHandlers: Array<() => void> = [];
+  private sendHandlers: Array<() => void> = [];
 
   /** Монтируем виджет в <body>. Идемпотентно + устойчиво к ранней инициализации. */
   mount(): void {
@@ -200,17 +221,25 @@ export class AgentStatusWidget {
         <div class="status">Готов</div>
         <div class="transcript" role="status" aria-live="polite"></div>
       </div>
+      <button class="send-btn" type="button" aria-label="Отправить текст" title="Отправить распознанный текст">
+        ${SEND_SVG}
+      </button>
     `;
 
     this.shadow.append(style, shell);
     this.shellEl = shell;
     this.micEl = shell.querySelector<HTMLButtonElement>('.mic');
+    this.sendEl = shell.querySelector<HTMLButtonElement>('.send-btn');
     this.statusEl = shell.querySelector<HTMLElement>('.status');
     this.transcriptEl = shell.querySelector<HTMLElement>('.transcript');
     this.iconSlot = shell.querySelector<HTMLElement>('.icon-slot');
 
     this.micEl?.addEventListener('click', () => {
       for (const h of this.micHandlers) h();
+    });
+
+    this.sendEl?.addEventListener('click', () => {
+      for (const h of this.sendHandlers) h();
     });
 
     document.body.appendChild(this.hostEl);
@@ -221,6 +250,21 @@ export class AgentStatusWidget {
     this.hostEl = null;
     this.shadow = null;
     this.micHandlers = [];
+    this.sendHandlers = [];
+  }
+
+  /** Показать/скрыть кнопку "Отправить" в зависимости от наличия текста. */
+  setHasPendingInterim(has: boolean): void {
+    this.shellEl?.setAttribute('data-has-pending', has ? 'true' : 'false');
+  }
+
+  /** Подписка на клик по кнопке "Отправить". */
+  onSendClick(handler: () => void): () => void {
+    this.sendHandlers.push(handler);
+    return () => {
+      const idx = this.sendHandlers.indexOf(handler);
+      if (idx >= 0) this.sendHandlers.splice(idx, 1);
+    };
   }
 
   setStatus(status: AgentStatus): void {
@@ -274,3 +318,8 @@ const STOP_SVG = `
 </svg>`;
 
 const SPINNER_SVG = `<span class="spinner" aria-hidden="true"></span>`;
+
+const SEND_SVG = `
+<svg class="icon-send" viewBox="0 0 24 24" aria-hidden="true">
+  <path d="M2 21l21-9L2 3v7l15 2-15 2z"/>
+</svg>`;

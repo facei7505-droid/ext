@@ -12,7 +12,7 @@
  * Все команды (заполни, сохрани, очисти) обрабатываются через LLM.
  */
 
-export type Intent = 'DICTATION' | 'CONFIRM' | 'CANCEL' | 'EDIT_FIELD' | 'DELETE_FIELD' | 'ADD_FIELD' | 'CLEAR_ALL' | 'SHOW_FIELDS' | 'HELP' | 'REPEAT' | 'SAVE' | 'NAVIGATE' | 'OPEN_TAB' | 'MULTI_EDIT';
+export type Intent = 'DICTATION' | 'CONFIRM' | 'CANCEL' | 'EDIT_FIELD' | 'DELETE_FIELD' | 'ADD_FIELD' | 'CLEAR_ALL' | 'SHOW_FIELDS' | 'HELP' | 'REPEAT' | 'SAVE' | 'NAVIGATE' | 'OPEN_TAB' | 'MULTI_EDIT' | 'GENERATE_SCHEDULE';
 
 export interface ParsedIntent {
   intent: Intent;
@@ -430,6 +430,17 @@ export function parseIntent(transcript: string): ParsedIntent | ParsedIntent[] {
       raw: transcript,
       confidence: 0.7,
       commands: multiCommands,
+    };
+  }
+
+  // Парсинг команды автогенерации расписания
+  const scheduleMatch = text.match(/(?:сгенерируй|создай|построй|сформируй|сделай)\s+(?:умное\s+)?расписание/i);
+  if (scheduleMatch) {
+    console.log('[intentParser] Matched GENERATE_SCHEDULE command');
+    return {
+      intent: 'GENERATE_SCHEDULE',
+      raw: transcript,
+      confidence: 0.9,
     };
   }
 

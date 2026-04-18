@@ -1,17 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue';
-
-interface Procedure {
-  procedureId: string;
-  specialistId: string;
-  time: string;
-}
-
-interface ScheduleDay {
-  day: number;
-  date: string;
-  procedures: Procedure[];
-}
+import SmartScheduleSection from '@/components/SmartScheduleSection.vue';
 
 const patientIIN = ref('');
 const admissionDate = ref('');
@@ -23,52 +12,6 @@ const bloodPressure = ref('');
 const pulse = ref('');
 const temperature = ref('');
 const recommendations = ref('');
-
-// Расписание процедур
-const scheduleStartDate = ref('');
-const scheduleEndDate = ref('');
-
-const schedule = ref<ScheduleDay[]>([
-  { day: 1, date: '', procedures: [] },
-  { day: 2, date: '', procedures: [] },
-  { day: 3, date: '', procedures: [] },
-  { day: 4, date: '', procedures: [] },
-  { day: 5, date: '', procedures: [] },
-  { day: 6, date: '', procedures: [] },
-  { day: 7, date: '', procedures: [] },
-  { day: 8, date: '', procedures: [] },
-  { day: 9, date: '', procedures: [] },
-]);
-
-const availableProcedures = [
-  { id: 'lfk', name: 'ЛФК', duration: 30 },
-  { id: 'massage', name: 'Массаж', duration: 30 },
-  { id: 'psychology', name: 'Психолог', duration: 40 },
-  { id: 'physiotherapy', name: 'Физиотерапия', duration: 30 },
-  { id: 'speech', name: 'Логопед', duration: 30 },
-];
-
-const specialists = [
-  { id: 'specialist1', name: 'Иванов И.И.', specialty: 'ЛФК', available: ['09:00', '10:00', '11:00'] },
-  { id: 'specialist2', name: 'Петров П.П.', specialty: 'Массаж', available: ['09:30', '10:30', '11:30'] },
-  { id: 'specialist3', name: 'Сидорова А.А.', specialty: 'Психолог', available: ['10:00', '11:00', '12:00'] },
-];
-
-const addProcedure = (dayIndex: number) => {
-  schedule.value[dayIndex].procedures.push({
-    procedureId: '',
-    specialistId: '',
-    time: '',
-  });
-};
-
-const removeProcedure = (dayIndex: number, procIndex: number) => {
-  schedule.value[dayIndex].procedures.splice(procIndex, 1);
-};
-
-const generateSchedule = () => {
-  console.log('Generating schedule:', schedule.value);
-};
 
 const handleSubmit = () => {
   console.log('Form submitted:', {
@@ -82,7 +25,6 @@ const handleSubmit = () => {
     pulse: pulse.value,
     temperature: temperature.value,
     recommendations: recommendations.value,
-    schedule: schedule.value,
   });
 };
 </script>
@@ -278,124 +220,13 @@ const handleSubmit = () => {
             </div>
           </div>
 
-          <!-- Умное расписание -->
+          <!-- Умное расписание (встроенный компонент) -->
           <div class="section-title">Умное расписание процедур</div>
-          <div class="row form-group">
-            <div class="col-md-3">
-              <label for="dtScheduleStartDate">Начало курса</label>
-            </div>
-            <div class="col-md-3">
-              <input
-                id="dtScheduleStartDate"
-                v-model="scheduleStartDate"
-                name="dtScheduleStartDate"
-                type="date"
-                class="form-control"
-                data-rpa-field="schedule.startDate"
-              />
-            </div>
-            <div class="col-md-3">
-              <label for="dtScheduleEndDate">Окончание курса</label>
-            </div>
-            <div class="col-md-3">
-              <input
-                id="dtScheduleEndDate"
-                v-model="scheduleEndDate"
-                name="dtScheduleEndDate"
-                type="date"
-                class="form-control"
-                data-rpa-field="schedule.endDate"
-              />
-            </div>
-          </div>
-
-          <div class="schedule-grid">
-            <div v-for="(day, dayIndex) in schedule" :key="day.day" class="schedule-day">
-              <div class="day-header">
-                <h3>День {{ day.day }}</h3>
-                <input
-                  v-model="day.date"
-                  type="date"
-                  class="form-control"
-                  :placeholder="`Дата дня ${day.day}`"
-                  :data-rpa-field="`schedule.day${day.day}.date`"
-                />
-              </div>
-              
-              <div class="procedures-list">
-                <div v-if="day.procedures.length === 0" class="no-procedures">
-                  Нет процедур
-                </div>
-                <div v-for="(proc, procIndex) in day.procedures" :key="procIndex" class="procedure-item">
-                  <select
-                    v-model="proc.procedureId"
-                    class="form-control"
-                    :data-rpa-field="`schedule.day${day.day}.procedure${procIndex}.type`"
-                  >
-                    <option value="">Выберите процедуру</option>
-                    <option v-for="p in availableProcedures" :key="p.id" :value="p.id">
-                      {{ p.name }} ({{ p.duration }} мин)
-                    </option>
-                  </select>
-                  
-                  <select
-                    v-model="proc.specialistId"
-                    class="form-control"
-                    :data-rpa-field="`schedule.day${day.day}.procedure${procIndex}.specialist`"
-                  >
-                    <option value="">Выберите специалиста</option>
-                    <option v-for="s in specialists" :key="s.id" :value="s.id">
-                      {{ s.name }} ({{ s.specialty }})
-                    </option>
-                  </select>
-                  
-                  <select
-                    v-model="proc.time"
-                    class="form-control"
-                    :data-rpa-field="`schedule.day${day.day}.procedure${procIndex}.time`"
-                  >
-                    <option value="">Выберите время</option>
-                    <option value="09:00">09:00</option>
-                    <option value="09:30">09:30</option>
-                    <option value="10:00">10:00</option>
-                    <option value="10:30">10:30</option>
-                    <option value="11:00">11:00</option>
-                    <option value="11:30">11:30</option>
-                    <option value="12:00">12:00</option>
-                    <option value="12:30">12:30</option>
-                    <option value="13:00">13:00</option>
-                    <option value="13:30">13:30</option>
-                    <option value="14:00">14:00</option>
-                    <option value="14:30">14:30</option>
-                    <option value="15:00">15:00</option>
-                  </select>
-                  
-                  <button
-                    type="button"
-                    class="btn btn-danger btn-sm"
-                    @click="removeProcedure(dayIndex, procIndex)"
-                  >
-                    Удалить
-                  </button>
-                </div>
-                
-                <button
-                  type="button"
-                  class="btn btn-primary btn-sm"
-                  @click="addProcedure(dayIndex)"
-                >
-                  + Добавить процедуру
-                </button>
-              </div>
-            </div>
-          </div>
+          <SmartScheduleSection />
 
           <!-- Кнопки -->
           <div class="form-actions">
-            <button type="button" class="btn btn-info" @click="generateSchedule">
-              Автоматически сгенерировать расписание
-            </button>
-            <button type="submit" class="btn btn-primary">Сохранить</button>
+            <button type="submit" class="btn btn-primary" data-rpa-action="submit">Сохранить</button>
             <button type="button" class="btn btn-default">Отмена</button>
           </div>
         </form>

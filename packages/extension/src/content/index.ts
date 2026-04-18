@@ -367,6 +367,17 @@ const proactive = initProactive({
   },
 });
 
+// Мост страница→TTS: страница диспатчит CustomEvent('rpa:tts-request', { detail: { text } })
+// — расширение озвучит текст голосом агента.
+window.addEventListener('rpa:tts-request', (ev) => {
+  const detail = (ev as CustomEvent<{ text?: string }>).detail;
+  const text = detail?.text?.trim();
+  if (!text) return;
+  proactive.voice.speak(text).catch((err) => {
+    console.warn('[rpa] TTS bridge error:', err);
+  });
+});
+
 /* -------------------- команды -------------------- */
 
 chrome.runtime.onMessage.addListener(
@@ -485,7 +496,7 @@ async function handleNavigation(target: string): Promise<RpaResult> {
     'diary': ['дневниковая запись', 'дневник', 'запись'],
     'diagnoses': ['диагнозы', 'диагностика'],
     'assignments': ['назначения', 'лекарства', 'медикаменты'],
-    'schedule': ['расписание', 'график', 'процедуры'],
+    'schedule': ['умное расписание', 'расписание', 'график', 'процедуры'],
   };
 
   const searchTerms = tabTextMap[target] || [target];

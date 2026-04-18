@@ -41,17 +41,28 @@ export function initProactive(cb: ProactiveCallbacks = {}): ProactiveHandle {
   // Синхронизация статуса.
   voice.on('statusChange', (status) => widget.setStatus(status));
 
-  // Промежуточный транскрипт для live-отображения.
-  voice.on('interim', (text) => widget.setTranscript(text));
+  // Промежуточный транскрипт для live-отображения + показываем кнопку "Отправить".
+  voice.on('interim', (text) => {
+    widget.setTranscript(text);
+    widget.setHasPendingInterim(text.trim().length > 0);
+  });
 
-  // Финальные транскрипты — вверх для LLM.
+  // Финальные транскрипты — вверх для LLM. Скрываем кнопку "Отправить".
   voice.on('transcript', (parsed) => {
     widget.setTranscript(parsed.raw);
+    widget.setHasPendingInterim(false);
     cb.onFinalTranscript?.(parsed);
   });
 
   voice.on('error', (err) => {
     widget.setTranscript(`⚠ ${err}`);
+    widget.setHasPendingInterim(false);
+  });
+
+  // Кнопка "Отправить" — вручную коммитим накопленный текст как финальный.
+  widget.onSendClick(() => {
+    voice.flushInterim();
+    widget.setHasPendingInterim(false);
   });
 
   // Переключение микрофона: любой активный режим → полный стоп; иначе — старт.

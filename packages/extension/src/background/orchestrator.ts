@@ -193,6 +193,10 @@ export class Orchestrator {
       return this.handleOpenTab(msg.url);
     }
 
+    if (msg.intent === 'GENERATE_SCHEDULE') {
+      return this.handleGenerateSchedule();
+    }
+
     // MULTI_EDIT → обрабатываем несколько команд последовательно
     if (msg.intent === 'MULTI_EDIT' && msg.commands) {
       console.log('[orchestrator] Handling MULTI_EDIT with commands:', msg.commands.length);
@@ -393,6 +397,35 @@ export class Orchestrator {
       text: r.ok ? `Переход на ${label} выполнен` : `Ошибка перехода на ${target}`,
       silentAfter: true,
     }).catch(() => {});
+    await this.setState('IDLE');
+    return r;
+  }
+
+  private async handleGenerateSchedule(): Promise<RpaResult> {
+    await this.setState('FILLING_DOM', 'Генерация расписания');
+    // Умное расписание встроено в первичный осмотр — убеждаемся что мы там
+    await this.deps.sendToTab({
+      type: 'rpa:navigate',
+      target: 'intake',
+    }).catch(() => {});
+
+    // Небольшая задержка на переключение страницы
+    await new Promise((r) => setTimeout(r, 400));
+
+    // Триггерим кнопку автогенерации расписания
+    const r = await this.deps.sendToTab({
+      type: 'rpa:clickAction',
+      action: 'generateSchedule',
+    });
+
+    await this.deps.sendToTab({
+      type: 'rpa:speak',
+      text: r.ok
+        ? 'Расписание сгенерировано на 9 рабочих дней.'
+        : 'Не удалось сгенерировать расписание. Проверьте назначенные процедуры.',
+      silentAfter: true,
+    }).catch(() => {});
+
     await this.setState('IDLE');
     return r;
   }

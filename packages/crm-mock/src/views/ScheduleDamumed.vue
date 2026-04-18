@@ -1,67 +1,154 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
+import {
+  generateSchedule as runScheduler,
+  type Procedure as AlgProcedure,
+  type Specialist as AlgSpecialist,
+  type PrescribedProcedure,
+  type ScheduledSlot,
+} from '@/scheduling/scheduler';
 
-interface Procedure {
-  procedureId: string;
-  specialistId: string;
-  time: string;
-}
-
-interface ScheduleDay {
-  day: number;
-  date: string;
-  procedures: Procedure[];
-}
-
-const startDate = ref('');
+const startDate = ref(new Date().toISOString().slice(0, 10));
 const endDate = ref('');
 
-// Процедуры на 9 рабочих дней
-const schedule = ref<ScheduleDay[]>([
-  { day: 1, date: '', procedures: [] },
-  { day: 2, date: '', procedures: [] },
-  { day: 3, date: '', procedures: [] },
-  { day: 4, date: '', procedures: [] },
-  { day: 5, date: '', procedures: [] },
-  { day: 6, date: '', procedures: [] },
-  { day: 7, date: '', procedures: [] },
-  { day: 8, date: '', procedures: [] },
-  { day: 9, date: '', procedures: [] },
-]);
-
-const availableProcedures = [
-  { id: 'lfk', name: 'ЛФК', duration: 30 },
-  { id: 'massage', name: 'Массаж', duration: 30 },
-  { id: 'psychology', name: 'Психолог', duration: 40 },
-  { id: 'physiotherapy', name: 'Физиотерапия', duration: 30 },
-  { id: 'speech', name: 'Логопед', duration: 30 },
+// Каталог процедур (длительности в минутах, 30-40).
+const availableProcedures: AlgProcedure[] = [
+  { id: 'lfk', name: 'ЛФК', duration: 30, specialty: 'ЛФК' },
+  { id: 'massage', name: 'Массаж', duration: 30, specialty: 'Массаж' },
+  { id: 'psychology', name: 'Психолог', duration: 40, specialty: 'Психолог' },
+  { id: 'physiotherapy', name: 'Физиотерапия', duration: 30, specialty: 'Физиотерапия' },
+  { id: 'speech', name: 'Логопед', duration: 30, specialty: 'Логопед' },
 ];
 
-const specialists = [
-  { id: 'specialist1', name: 'Иванов И.И.', specialty: 'ЛФК', available: ['09:00', '10:00', '11:00'] },
-  { id: 'specialist2', name: 'Петров П.П.', specialty: 'Массаж', available: ['09:30', '10:30', '11:30'] },
-  { id: 'specialist3', name: 'Сидорова А.А.', specialty: 'Психолог', available: ['10:00', '11:00', '12:00'] },
+// Каталог специалистов с недельной доступностью (0=Вс ... 6=Сб).
+const specialists: AlgSpecialist[] = [
+  {
+    id: 'specialist1',
+    name: 'Иванов И.И.',
+    specialty: 'ЛФК',
+    weeklyAvailability: {
+      1: ['09:00', '09:30', '10:00', '10:30', '11:00'],
+      2: ['09:00', '09:30', '10:00', '10:30', '11:00'],
+      3: ['09:00', '09:30', '10:00', '10:30', '11:00'],
+      4: ['09:00', '09:30', '10:00'],
+      5: ['09:00', '09:30', '10:00', '10:30', '11:00'],
+    },
+  },
+  {
+    id: 'specialist2',
+    name: 'Петров П.П.',
+    specialty: 'Массаж',
+    weeklyAvailability: {
+      1: ['09:30', '10:30', '11:30', '13:00', '13:30'],
+      2: ['09:30', '10:30', '11:30'],
+      3: ['09:30', '10:30', '11:30', '13:00', '13:30'],
+      4: ['09:30', '10:30', '11:30', '13:00', '13:30'],
+      5: ['09:30', '10:30', '11:30'],
+    },
+  },
+  {
+    id: 'specialist3',
+    name: 'Сидорова А.А.',
+    specialty: 'Психолог',
+    weeklyAvailability: {
+      1: ['10:00', '11:00', '12:00'],
+      2: ['10:00', '11:00', '12:00', '14:00'],
+      3: ['10:00', '11:00', '12:00'],
+      4: ['10:00', '11:00', '12:00', '14:00'],
+      5: ['10:00', '11:00'],
+    },
+  },
+  {
+    id: 'specialist4',
+    name: 'Козлов В.В.',
+    specialty: 'Физиотерапия',
+    weeklyAvailability: {
+      1: ['09:00', '09:30', '13:00', '13:30', '14:00'],
+      2: ['09:00', '09:30', '13:00', '13:30', '14:00'],
+      3: ['09:00', '09:30', '13:00', '13:30'],
+      4: ['09:00', '09:30', '13:00', '13:30', '14:00'],
+      5: ['09:00', '09:30', '13:00'],
+    },
+  },
+  {
+    id: 'specialist5',
+    name: 'Никитина О.Л.',
+    specialty: 'Логопед',
+    weeklyAvailability: {
+      1: ['11:00', '11:30', '12:00'],
+      2: ['11:00', '11:30', '12:00'],
+      3: ['11:00', '11:30'],
+      4: ['11:00', '11:30', '12:00'],
+      5: ['11:00', '11:30', '12:00'],
+    },
+  },
 ];
 
-const addProcedure = (dayIndex: number) => {
-  schedule.value[dayIndex].procedures.push({
-    procedureId: '',
-    specialistId: '',
-    time: '',
+// Назначенные процедуры (врач отмечает что и сколько сеансов).
+interface PrescribedRow extends PrescribedProcedure {
+  enabled: boolean;
+}
+
+const prescribed = ref<PrescribedRow[]>(
+  availableProcedures.map((p) => ({
+    procedureId: p.id,
+    sessions: 9,
+    enabled: false,
+  })),
+);
+
+// Результат генерации: слоты, сгруппированные по дням.
+const generatedSlots = ref<ScheduledSlot[]>([]);
+const unplacedList = ref<Array<{ procedureId: string; reason: string }>>([]);
+const dayDatesRef = ref<Array<{ day: number; date: string; dayOfWeek: number }>>([]);
+
+const slotsByDay = computed(() => {
+  const map: Record<number, ScheduledSlot[]> = {};
+  for (const slot of generatedSlots.value) {
+    if (!map[slot.day]) map[slot.day] = [];
+    map[slot.day].push(slot);
+  }
+  return map;
+});
+
+const weekdayName = (dow: number): string => {
+  return ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'][dow] || '';
+};
+
+const procedureName = (id: string): string => {
+  return availableProcedures.find((p) => p.id === id)?.name || id;
+};
+
+const handleGenerate = () => {
+  const enabled = prescribed.value.filter((r) => r.enabled && r.sessions > 0);
+  if (enabled.length === 0) {
+    alert('Отметьте хотя бы одну процедуру и укажите количество сеансов');
+    return;
+  }
+  const parsed = startDate.value ? new Date(startDate.value) : new Date();
+  const result = runScheduler({
+    startDate: parsed,
+    prescribed: enabled.map(({ procedureId, sessions }) => ({ procedureId, sessions })),
+    procedures: availableProcedures,
+    specialists,
+    daysCount: 9,
   });
-};
-
-const removeProcedure = (dayIndex: number, procIndex: number) => {
-  schedule.value[dayIndex].procedures.splice(procIndex, 1);
-};
-
-const generateSchedule = () => {
-  console.log('Generating schedule:', schedule.value);
+  generatedSlots.value = result.slots;
+  unplacedList.value = result.unplaced;
+  dayDatesRef.value = result.dayDates;
+  // Обновляем endDate по последнему рабочему дню
+  if (result.dayDates.length > 0) {
+    endDate.value = result.dayDates[result.dayDates.length - 1].date;
+  }
 };
 
 const handleSubmit = () => {
-  console.log('Schedule submitted:', schedule.value);
+  console.log('Schedule submitted:', generatedSlots.value);
+  alert(`Расписание сохранено: ${generatedSlots.value.length} процедур`);
 };
+
+// Экспонируем метод для голосовой команды из расширения
+(window as unknown as { __rpaGenerateSchedule?: () => void }).__rpaGenerateSchedule = handleGenerate;
 </script>
 
 <template>
@@ -103,95 +190,105 @@ const handleSubmit = () => {
             </div>
           </div>
 
-          <!-- Расписание на 9 дней -->
-          <div class="section-title">Расписание процедур (9 рабочих дней)</div>
-          <div class="schedule-grid">
-            <div v-for="(day, dayIndex) in schedule" :key="day.day" class="schedule-day">
-              <div class="day-header">
-                <h3>День {{ day.day }}</h3>
-                <input
-                  v-model="day.date"
-                  type="date"
-                  class="form-control"
-                  :placeholder="`Дата дня ${day.day}`"
-                  :data-rpa-field="`schedule.day${day.day}.date`"
-                />
-              </div>
-              
-              <div class="procedures-list">
-                <div v-if="day.procedures.length === 0" class="no-procedures">
-                  Нет процедур
+          <!-- Назначенные процедуры -->
+          <div class="section-title">Назначенные процедуры</div>
+          <table class="prescribed-table">
+            <thead>
+              <tr>
+                <th style="width:40px"></th>
+                <th>Процедура</th>
+                <th style="width:100px">Длительность</th>
+                <th>Специалист</th>
+                <th style="width:120px">Сеансов</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(row, idx) in prescribed" :key="row.procedureId">
+                <td>
+                  <input
+                    type="checkbox"
+                    v-model="row.enabled"
+                    :data-rpa-field="`schedule.prescribed.${row.procedureId}.enabled`"
+                  />
+                </td>
+                <td>{{ availableProcedures[idx].name }}</td>
+                <td>{{ availableProcedures[idx].duration }} мин</td>
+                <td>{{ availableProcedures[idx].specialty }}</td>
+                <td>
+                  <input
+                    type="number"
+                    v-model.number="row.sessions"
+                    min="1"
+                    max="18"
+                    class="form-control"
+                    :data-rpa-field="`schedule.prescribed.${row.procedureId}.sessions`"
+                  />
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          <!-- Кнопка генерации -->
+          <div class="form-actions" style="margin-top:16px">
+            <button
+              type="button"
+              class="btn btn-info"
+              data-rpa-action="generateSchedule"
+              @click="handleGenerate"
+            >
+              Автоматически сгенерировать расписание
+            </button>
+          </div>
+
+          <!-- Сгенерированное расписание -->
+          <template v-if="generatedSlots.length > 0 || dayDatesRef.length > 0">
+            <div class="section-title" style="margin-top:24px">
+              Сгенерированное расписание ({{ generatedSlots.length }} процедур за 9 рабочих дней)
+            </div>
+            <div v-if="unplacedList.length > 0" class="alert-warning">
+              ⚠ Не удалось разместить {{ unplacedList.length }} сеансов:
+              <ul>
+                <li v-for="(u, i) in unplacedList" :key="i">
+                  {{ procedureName(u.procedureId) }}: {{ u.reason }}
+                </li>
+              </ul>
+            </div>
+
+            <div class="schedule-grid">
+              <div v-for="info in dayDatesRef" :key="info.day" class="schedule-day">
+                <div class="day-header">
+                  <h3>День {{ info.day }} — {{ weekdayName(info.dayOfWeek) }}, {{ info.date }}</h3>
                 </div>
-                <div v-for="(proc, procIndex) in day.procedures" :key="procIndex" class="procedure-item">
-                  <select
-                    v-model="proc.procedureId"
-                    class="form-control"
-                    :data-rpa-field="`schedule.day${day.day}.procedure${procIndex}.type`"
+                <div class="procedures-list">
+                  <div v-if="!slotsByDay[info.day] || slotsByDay[info.day].length === 0" class="no-procedures">
+                    Нет процедур
+                  </div>
+                  <div
+                    v-for="(slot, i) in slotsByDay[info.day] || []"
+                    :key="i"
+                    class="slot-item"
+                    :data-rpa-field="`schedule.day${info.day}.slot${i}`"
                   >
-                    <option value="">Выберите процедуру</option>
-                    <option v-for="p in availableProcedures" :key="p.id" :value="p.id">
-                      {{ p.name }} ({{ p.duration }} мин)
-                    </option>
-                  </select>
-                  
-                  <select
-                    v-model="proc.specialistId"
-                    class="form-control"
-                    :data-rpa-field="`schedule.day${day.day}.procedure${procIndex}.specialist`"
-                  >
-                    <option value="">Выберите специалиста</option>
-                    <option v-for="s in specialists" :key="s.id" :value="s.id">
-                      {{ s.name }} ({{ s.specialty }})
-                    </option>
-                  </select>
-                  
-                  <select
-                    v-model="proc.time"
-                    class="form-control"
-                    :data-rpa-field="`schedule.day${day.day}.procedure${procIndex}.time`"
-                  >
-                    <option value="">Выберите время</option>
-                    <option value="09:00">09:00</option>
-                    <option value="09:30">09:30</option>
-                    <option value="10:00">10:00</option>
-                    <option value="10:30">10:30</option>
-                    <option value="11:00">11:00</option>
-                    <option value="11:30">11:30</option>
-                    <option value="12:00">12:00</option>
-                    <option value="12:30">12:30</option>
-                    <option value="13:00">13:00</option>
-                    <option value="13:30">13:30</option>
-                    <option value="14:00">14:00</option>
-                    <option value="14:30">14:30</option>
-                    <option value="15:00">15:00</option>
-                  </select>
-                  
-                  <button
-                    type="button"
-                    class="btn btn-danger btn-sm"
-                    @click="removeProcedure(dayIndex, procIndex)"
-                  >
-                    Удалить
-                  </button>
+                    <span class="slot-time">{{ slot.time }}</span>
+                    <span class="slot-proc">{{ slot.procedureName }}</span>
+                    <span class="slot-spec">{{ slot.specialistName }}</span>
+                    <span class="slot-dur">{{ slot.duration }} мин</span>
+                  </div>
                 </div>
-                
-                <button
-                  type="button"
-                  class="btn btn-primary btn-sm"
-                  @click="addProcedure(dayIndex)"
-                >
-                  + Добавить процедуру
-                </button>
               </div>
             </div>
-          </div>
+          </template>
 
           <!-- Кнопки -->
           <div class="form-actions">
-            <button type="button" class="btn btn-info" @click="generateSchedule">
-              Автоматически сгенерировать расписание
+            <button
+              type="submit"
+              class="btn btn-primary"
+              data-rpa-action="submit"
+              :disabled="generatedSlots.length === 0"
+            >
+              Сохранить расписание
             </button>
-            <button type="submit" class="btn btn-primary">Сохранить расписание</button>
             <button type="button" class="btn btn-default">Отмена</button>
           </div>
         </form>
@@ -337,6 +434,80 @@ textarea:focus {
 
 .procedure-item select:last-of-type {
   margin-bottom: 0;
+}
+
+.prescribed-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+}
+
+.prescribed-table th,
+.prescribed-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid #eee;
+  text-align: left;
+  font-size: 14px;
+}
+
+.prescribed-table th {
+  background: #f8f9fa;
+  font-weight: 600;
+  color: #555;
+}
+
+.prescribed-table input[type="number"] {
+  width: 80px;
+  padding: 4px 8px;
+}
+
+.alert-warning {
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  color: #856404;
+  padding: 12px 16px;
+  border-radius: 4px;
+  margin-bottom: 16px;
+}
+
+.alert-warning ul {
+  margin: 8px 0 0;
+  padding-left: 20px;
+}
+
+.slot-item {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-left: 3px solid #3098a1;
+  border-radius: 4px;
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+
+.slot-time {
+  font-weight: 700;
+  color: #3098a1;
+  min-width: 50px;
+}
+
+.slot-proc {
+  font-weight: 500;
+  flex: 1;
+}
+
+.slot-spec {
+  color: #666;
+  font-size: 12px;
+}
+
+.slot-dur {
+  color: #999;
+  font-size: 11px;
+  white-space: nowrap;
 }
 
 .form-actions {

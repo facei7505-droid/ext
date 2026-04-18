@@ -8,7 +8,7 @@ import LegacyInput from '@/components/legacy/LegacyInput.vue';
 import LegacySelect from '@/components/legacy/LegacySelect.vue';
 import LegacyTextarea from '@/components/legacy/LegacyTextarea.vue';
 import { createEmptyScheduleForm } from '@/types/forms';
-import { RpaActions, RpaForms } from '@/rpa/selectors';
+import { RpaActions } from '@/rpa/selectors';
 
 const form = reactive(createEmptyScheduleForm());
 const submittedAt = ref<string | null>(null);
@@ -103,7 +103,7 @@ function onReset(): void {
   <div class="mx-auto grid max-w-6xl gap-4 lg:grid-cols-[1fr_20rem]">
     <form
       class="space-y-4"
-      :data-rpa-form="RpaForms.schedule"
+      data-rpa-form="schedule"
       autocomplete="off"
       novalidate
       @submit.prevent="onSubmit"
