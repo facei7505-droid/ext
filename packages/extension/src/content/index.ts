@@ -71,6 +71,139 @@ function convertSelectValue(field: string, value: string): string {
     return disabilityMap[valueLower] || value;
   }
 
+  // Конвертация для типа диагноза
+  if (field === 'diagnoses.new.type') {
+    const diagnosisTypeMap: Record<string, string> = {
+      // Основной диагноз
+      'основной': 'primary',
+      'основной диагноз': 'primary',
+      'первичный': 'primary',
+      'первичный диагноз': 'primary',
+      'главный': 'primary',
+      'главный диагноз': 'primary',
+      'основное': 'primary',
+      'основное заболевание': 'primary',
+      'ведущий': 'primary',
+      'ведущий диагноз': 'primary',
+      // Сопутствующий диагноз
+      'сопутствующий': 'secondary',
+      'сопутствующий диагноз': 'secondary',
+      'вторичный': 'secondary',
+      'вторичный диагноз': 'secondary',
+      'дополнительный': 'secondary',
+      'дополнительный диагноз': 'secondary',
+      'фоновый': 'secondary',
+      'фоновый диагноз': 'secondary',
+      // Осложнение
+      'осложнение': 'complication',
+      'осложнения': 'complication',
+      'осложнении': 'complication',
+      'осложнений': 'complication',
+      'осложнение основного': 'complication',
+      'осложнение заболевания': 'complication',
+      'осложнение основного диагноза': 'complication',
+    };
+
+    const converted = diagnosisTypeMap[valueLower] || value;
+
+    // Проверяем реальные значения в select элементе
+    const selector = DamumedFieldMap[field] || field;
+    if (selector) {
+      const element = document.querySelector<HTMLSelectElement>(selector);
+      if (element && element.tagName === 'SELECT') {
+        const options = Array.from(element.options).map(opt => ({
+          value: opt.value.toLowerCase(),
+          text: opt.text.toLowerCase(),
+        }));
+
+        // Ищем точное совпадение по value
+        const exactMatch = options.find(opt => opt.value === converted.toLowerCase());
+        if (exactMatch) {
+          console.log('[rpa] Found exact match for diagnosis type:', exactMatch.value);
+          return exactMatch.value;
+        }
+
+        // Ищем частичное совпадение по value
+        const partialMatch = options.find(opt => opt.value.includes(converted.toLowerCase()) || converted.toLowerCase().includes(opt.value));
+        if (partialMatch) {
+          console.log('[rpa] Found partial match for diagnosis type:', partialMatch.value);
+          return partialMatch.value;
+        }
+
+        // Ищем совпадение по тексту опции
+        const textMatch = options.find(opt => opt.text.includes(converted.toLowerCase()) || converted.toLowerCase().includes(opt.text));
+        if (textMatch) {
+          console.log('[rpa] Found text match for diagnosis type:', textMatch.value);
+          return textMatch.value;
+        }
+
+        console.log('[rpa] No match found for diagnosis type:', converted, 'Available options:', options);
+      }
+    }
+
+    return converted;
+  }
+
+  // Конвертация для типа назначения
+  if (field === 'assignments.new.type') {
+    const assignmentTypeMap: Record<string, string> = {
+      'лекарственный': 'medication',
+      'лекарственный препарат': 'medication',
+      'препарат': 'medication',
+      'лекарство': 'medication',
+      'медикамент': 'medication',
+      'медикаментозный': 'medication',
+      'процедура': 'procedure',
+      'процедуры': 'procedure',
+      'исследование': 'investigation',
+      'обследование': 'investigation',
+      'анализ': 'analysis',
+      'анализы': 'analysis',
+      'диагностика': 'diagnostics',
+      'операция': 'surgery',
+      'хирургический': 'surgery',
+    };
+
+    const converted = assignmentTypeMap[valueLower] || value;
+
+    // Проверяем реальные значения в select элементе
+    const selector = DamumedFieldMap[field] || field;
+    if (selector) {
+      const element = document.querySelector<HTMLSelectElement>(selector);
+      if (element && element.tagName === 'SELECT') {
+        const options = Array.from(element.options).map(opt => ({
+          value: opt.value.toLowerCase(),
+          text: opt.text.toLowerCase(),
+        }));
+
+        // Ищем точное совпадение по value
+        const exactMatch = options.find(opt => opt.value === converted.toLowerCase());
+        if (exactMatch) {
+          console.log('[rpa] Found exact match for assignment type:', exactMatch.value);
+          return exactMatch.value;
+        }
+
+        // Ищем частичное совпадение по value
+        const partialMatch = options.find(opt => opt.value.includes(converted.toLowerCase()) || converted.toLowerCase().includes(opt.value));
+        if (partialMatch) {
+          console.log('[rpa] Found partial match for assignment type:', partialMatch.value);
+          return partialMatch.value;
+        }
+
+        // Ищем совпадение по тексту опции
+        const textMatch = options.find(opt => opt.text.includes(converted.toLowerCase()) || converted.toLowerCase().includes(opt.text));
+        if (textMatch) {
+          console.log('[rpa] Found text match for assignment type:', textMatch.value);
+          return textMatch.value;
+        }
+
+        console.log('[rpa] No match found for assignment type:', converted, 'Available options:', options);
+      }
+    }
+
+    return converted;
+  }
+
   return value;
 }
 

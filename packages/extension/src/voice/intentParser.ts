@@ -174,26 +174,36 @@ const FIELD_NAME_MAP: Record<string, string> = {
   'тип назначения': 'assignments.new.type',
   'вид назначения': 'assignments.new.type',
   'категория назначения': 'assignments.new.type',
+  'класс назначения': 'assignments.new.type',
   'название препарата': 'assignments.new.name',
   'наименование препарата': 'assignments.new.name',
   'название лекарства': 'assignments.new.name',
+  'наименование лекарства': 'assignments.new.name',
+  'имя препарата': 'assignments.new.name',
   'препарат': 'assignments.new.name',
   'лекарство': 'assignments.new.name',
+  'медикамент': 'assignments.new.name',
   'название назначения': 'assignments.new.name',
   'наименование назначения': 'assignments.new.name',
-  'лекарственный препарат': 'assignments.new.name',
+  'имя назначения': 'assignments.new.name',
   'дозировка': 'assignments.new.dosage',
   'доза': 'assignments.new.dosage',
   'количество': 'assignments.new.dosage',
+  'объем': 'assignments.new.dosage',
   'частота приема': 'assignments.new.frequency',
+  'частота приёма': 'assignments.new.frequency',
   'частота': 'assignments.new.frequency',
   'как часто': 'assignments.new.frequency',
   'режим приема': 'assignments.new.frequency',
+  'режим приёма': 'assignments.new.frequency',
+  'периодичность': 'assignments.new.frequency',
+  'интервал': 'assignments.new.frequency',
   'дата начала приема': 'assignments.new.startDate',
+  'дата начала приёма': 'assignments.new.startDate',
   'дата начала лечения': 'assignments.new.startDate',
   'дата начала курса': 'assignments.new.startDate',
   'дата окончания приема': 'assignments.new.endDate',
-  'дата окончания': 'assignments.new.endDate',
+  'дата окончания приёма': 'assignments.new.endDate',
   'дата конца': 'assignments.new.endDate',
   'дата завершения': 'assignments.new.endDate',
   'дата окончания курса': 'assignments.new.endDate',
@@ -223,15 +233,20 @@ function normalizeFieldName(fieldName: string): string {
 function parseMultipleCommands(text: string, originalTranscript: string): ParsedIntent[] {
   const commands: ParsedIntent[] = [];
 
+  // Нормализуем текст: заменяем ё на е для согласования
+  const normalizedText = text.replace(/ё/g, 'е');
+  const normalizedOriginal = originalTranscript.replace(/ё/g, 'е');
+
   // Сортируем ключи FIELD_NAME_MAP по длине (сначала длинные, чтобы "дата поступления" было до "дата")
   const sortedFieldNames = Object.keys(FIELD_NAME_MAP).sort((a, b) => b.length - a.length);
 
   // Находим все позиции полей в тексте
   const fieldMatches: { fieldName: string; index: number; field: string }[] = [];
   for (const fieldName of sortedFieldNames) {
+    const normalizedFieldName = fieldName.replace(/ё/g, 'е');
     let searchIndex = 0;
     while (true) {
-      const fieldIndex = text.indexOf(fieldName + ' ', searchIndex);
+      const fieldIndex = normalizedText.indexOf(normalizedFieldName + ' ', searchIndex);
       if (fieldIndex === -1) break;
       fieldMatches.push({
         fieldName,
@@ -299,11 +314,12 @@ function parseMultipleCommands(text: string, originalTranscript: string): Parsed
     const match = filteredMatches[i];
     const nextMatch = filteredMatches[i + 1];
 
-    const afterFieldStart = match.index + match.fieldName.length + 1;
-    const nextFieldIndex = nextMatch ? nextMatch.index : text.length;
+    const normalizedFieldName = match.fieldName.replace(/ё/g, 'е');
+    const afterFieldStart = match.index + normalizedFieldName.length + 1;
+    const nextFieldIndex = nextMatch ? nextMatch.index : normalizedText.length;
 
-    const valueText = text.slice(afterFieldStart, nextFieldIndex).trim();
-    const originalValueText = originalTranscript.slice(afterFieldStart, nextFieldIndex).trim();
+    const valueText = normalizedText.slice(afterFieldStart, nextFieldIndex).trim();
+    const originalValueText = normalizedOriginal.slice(afterFieldStart, nextFieldIndex).trim();
 
     console.log('[intentParser] Extracting value for:', match.fieldName, 'from index', afterFieldStart, 'to', nextFieldIndex, 'value:', valueText);
 
