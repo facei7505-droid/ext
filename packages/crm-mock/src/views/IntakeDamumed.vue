@@ -1,17 +1,21 @@
 <script setup lang="ts">
-import { ref } from 'vue';
 import SmartScheduleSection from '@/components/SmartScheduleSection.vue';
+import { storeToRefs } from 'pinia';
+import { usePatientStore } from '@/stores/patientStore';
 
-const patientIIN = ref('');
-const admissionDate = ref('');
-const department = ref('');
-const diagnosis = ref('');
-const complaints = ref('');
-const anamnesis = ref('');
-const bloodPressure = ref('');
-const pulse = ref('');
-const temperature = ref('');
-const recommendations = ref('');
+const patientStore = usePatientStore();
+const {
+  iin: patientIIN,
+  admissionDate,
+  department,
+  diagnosis,
+  complaints,
+  anamnesis,
+  bloodPressure,
+  pulse,
+  temperature,
+  recommendations,
+} = storeToRefs(patientStore);
 
 const handleSubmit = () => {
   console.log('Form submitted:', {

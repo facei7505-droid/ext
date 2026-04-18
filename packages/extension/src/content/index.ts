@@ -354,6 +354,7 @@ const proactive = initProactive({
       addValue: parsed.addValue,
       target: parsed.target,
       url: parsed.url,
+      targetDay: parsed.targetDay,
       procedure: parsed.procedure,
       diary: parsed.diary,
       commands: parsed.commands?.map(cmd => ({
@@ -678,6 +679,15 @@ async function handleCommand(msg: BackgroundToContentMsg): Promise<RpaResult> {
         if (!val) missing.push(field);
       }
       return { ok: true, data: { missing } };
+    }
+
+    case 'rpa:executeJs': {
+      try {
+        const result = eval(msg.js);
+        return { ok: true, data: result };
+      } catch (err) {
+        return { ok: false, error: (err as Error).message, code: 'UNKNOWN' };
+      }
     }
 
     default: {

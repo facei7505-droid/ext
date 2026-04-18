@@ -12,7 +12,7 @@
  * Все команды (заполни, сохрани, очисти) обрабатываются через LLM.
  */
 
-export type Intent = 'DICTATION' | 'CONFIRM' | 'CANCEL' | 'EDIT_FIELD' | 'DELETE_FIELD' | 'ADD_FIELD' | 'CLEAR_ALL' | 'SHOW_FIELDS' | 'HELP' | 'REPEAT' | 'SAVE' | 'NAVIGATE' | 'OPEN_TAB' | 'MULTI_EDIT' | 'GENERATE_SCHEDULE' | 'MARK_COMPLETED';
+export type Intent = 'DICTATION' | 'CONFIRM' | 'CANCEL' | 'EDIT_FIELD' | 'DELETE_FIELD' | 'ADD_FIELD' | 'CLEAR_ALL' | 'SHOW_FIELDS' | 'HELP' | 'REPEAT' | 'SAVE' | 'NAVIGATE' | 'OPEN_TAB' | 'MULTI_EDIT' | 'GENERATE_SCHEDULE' | 'MARK_COMPLETED' | 'SELECT_DATE';
 
 export interface ParsedIntent {
   intent: Intent;
@@ -32,10 +32,12 @@ export interface ParsedIntent {
   url?: string;
   /** Для нескольких команд: массив команд */
   commands?: ParsedIntent[];
-  /** Для MARK_COMPLETED: идентификатор процедуры (lfk, massage, psychology…) */
+  /** Для MARK_COMPLETED: идентификатор процедуры. */
   procedure?: string;
-  /** Для MARK_COMPLETED: опциональный короткий дневник процедуры */
+  /** Для MARK_COMPLETED: опциональный короткий дневник. */
   diary?: string;
+  /** Для SELECT_DATE: номер дня или 'next'/'prev'. */
+  targetDay?: number | 'next' | 'prev';
 }
 
 const CONFIRM_KEYWORDS = [
@@ -497,6 +499,35 @@ export function parseIntent(transcript: string): ParsedIntent | ParsedIntent[] {
         };
       }
     }
+  }
+
+  // Выбор даты в журнале процедур: "день 3", "день два", "покажи день 3", "следующий день", "предыдущий день"
+  const NUMBER_WORDS: Record<string, number> = {
+    'один': 1, 'два': 2, 'три': 3, 'четыре': 4, 'пять': 5,
+    'шесть': 6, 'семь': 7, 'восемь': 8, 'девять': 9, 'десять': 10,
+  };
+  const dateMatch = text.match(/(?:покажи\s+)?день\s+(\d+|[а-яё]+)|(?:перейди\s+)?(?:на\s+)?(?:следующий|следующую)\s+день|(?:перейди\s+)?(?:на\s+)?(?:предыдущий|предыдущую)\s+день/i);
+  if (dateMatch) {
+    let targetDay: number | 'next' | 'prev' | undefined;
+    if (dateMatch[1]) {
+      const dayStr = dateMatch[1].toLowerCase();
+      if (dayStr in NUMBER_WORDS) {
+        targetDay = NUMBER_WORDS[dayStr];
+      } else {
+        targetDay = parseInt(dayStr, 10);
+      }
+    } else if (dateMatch[0].includes('следующ')) {
+      targetDay = 'next';
+    } else if (dateMatch[0].includes('предыдущ')) {
+      targetDay = 'prev';
+    }
+    console.log('[intentParser] Matched SELECT_DATE:', targetDay);
+    return {
+      intent: 'SELECT_DATE',
+      raw: transcript,
+      confidence: 0.9,
+      targetDay,
+    };
   }
 
   // "запиши в дневник <процедура>: <текст>" / "дневник <процедура> <текст>"

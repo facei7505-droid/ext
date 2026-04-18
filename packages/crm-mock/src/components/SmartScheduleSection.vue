@@ -11,6 +11,9 @@ import {
   type PrescribedProcedure,
   type ScheduledSlot,
 } from '@/scheduling/scheduler';
+import { useCourseStore } from '@/stores/courseStore';
+
+const courseStore = useCourseStore();
 
 const startDate = ref(new Date().toISOString().slice(0, 10));
 const endDate = ref('');
@@ -145,6 +148,8 @@ const handleGenerate = () => {
   generatedSlots.value = result.slots;
   unplacedList.value = result.unplaced;
   dayDatesRef.value = result.dayDates;
+  // Публикуем расписание в стор курса — журнал процедур прочитает оттуда.
+  courseStore.setSchedule(result.slots, result.dayDates);
   if (result.dayDates.length > 0) {
     endDate.value = result.dayDates[result.dayDates.length - 1].date;
   }

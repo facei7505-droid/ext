@@ -18,7 +18,7 @@ import { RESPONSE_JSON_SCHEMA, SYSTEM_PROMPT } from './systemPrompt';
 import type { LlmClientConfig, LlmRequestInput, StructuredFormResponse } from '@shared/visit';
 
 const DEFAULT_BASE_URL = 'https://api.openai.com/v1';
-const DEFAULT_MODEL = 'gpt-4o-mini';
+const DEFAULT_MODEL = 'llama-3.3-70b-versatile';
 const DEFAULT_TIMEOUT = 20_000;
 
 export class LlmError extends Error {

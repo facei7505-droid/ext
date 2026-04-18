@@ -201,6 +201,10 @@ export class Orchestrator {
       return this.handleMarkCompleted(msg.procedure, msg.diary);
     }
 
+    if (msg.intent === 'SELECT_DATE' && msg.targetDay) {
+      return this.handleSelectDate(msg.targetDay);
+    }
+
     // MULTI_EDIT → обрабатываем несколько команд последовательно
     if (msg.intent === 'MULTI_EDIT' && msg.commands) {
       console.log('[orchestrator] Handling MULTI_EDIT with commands:', msg.commands.length);
@@ -511,6 +515,84 @@ export class Orchestrator {
       text: `Открытие вкладки на ${url} в разработке`,
     }).catch(() => {});
     return { ok: true, data: { opened: url } };
+  }
+
+  private async handleSelectDate(targetDay: number | 'next' | 'prev'): Promise<RpaResult> {
+    await this.setState('FILLING_DOM', 'Переключение даты в журнале');
+
+    // Переходим в журнал процедур
+    await this.deps.sendToTab({ type: 'rpa:navigate', target: 'services' }).catch(() => {});
+    await new Promise((r) => setTimeout(r, 500));
+
+    if (typeof targetDay === 'number') {
+      // Ждём появления select
+      const selectSelector = `select[data-rpa-field="services.selectedDate"]`;
+      await this.deps.sendToTab({
+        type: 'rpa:waitFor',
+        selector: selectSelector,
+        timeoutMs: 2500,
+      }).catch(() => {});
+
+      // Находим option по data-rpa-action и получаем его значение (дата)
+      const action = `selectDate:day${targetDay}`;
+      const queryRes = await this.deps.sendToTab({
+        type: 'rpa:queryDom',
+        selector: `option[data-rpa-action="${action}"]`,
+      });
+
+      if (!queryRes.ok || !queryRes.data || !(queryRes.data as any).value) {
+        await this.deps.sendToTab({
+          type: 'rpa:speak',
+          text: `Не нашёл день ${targetDay} в журнале. Сначала сгенерируйте расписание.`,
+          silentAfter: true,
+        }).catch(() => {});
+        await this.setState('IDLE');
+        return { ok: false, error: 'Day option not found' };
+      }
+
+      const dateValue = (queryRes.data as any).value as string;
+
+      // Устанавливаем значение select напрямую через JavaScript и dispatchEvent для Vue реактивности
+      const execRes = await this.deps.sendToTab({
+        type: 'rpa:executeJs',
+        js: `
+          const select = document.querySelector('${selectSelector}');
+          if (select) {
+            select.value = '${dateValue}';
+            select.dispatchEvent(new Event('change', { bubbles: true }));
+            select.dispatchEvent(new Event('input', { bubbles: true }));
+            return { ok: true, value: select.value };
+          }
+          return { ok: false, error: 'select not found' };
+        `,
+      });
+
+      if (!execRes.ok) {
+        await this.deps.sendToTab({
+          type: 'rpa:speak',
+          text: `Не удалось переключиться на день ${targetDay}.`,
+          silentAfter: true,
+        }).catch(() => {});
+        await this.setState('IDLE');
+        return execRes;
+      }
+
+      await this.deps.sendToTab({
+        type: 'rpa:speak',
+        text: `Перешёл к дню ${targetDay}.`,
+        silentAfter: true,
+      }).catch(() => {});
+    } else {
+      // next/prev — упрощённо: сообщаем что в разработке
+      await this.deps.sendToTab({
+        type: 'rpa:speak',
+        text: 'Переключение на следующий/предыдущий день в разработке. Скажите номер дня, например "день 3".',
+        silentAfter: true,
+      }).catch(() => {});
+    }
+
+    await this.setState('IDLE');
+    return { ok: true };
   }
 
   private async handleMultiEdit(commands: TranscriptMsg[]): Promise<RpaResult> {

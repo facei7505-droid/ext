@@ -56,6 +56,11 @@ export interface CheckRequiredMsg {
   form: RpaFormKey;
 }
 
+export interface ExecuteJsMsg {
+  type: 'rpa:executeJs';
+  js: string;
+}
+
 export type AgentVisualStatus = 'idle' | 'listening' | 'thinking' | 'filling' | 'speaking';
 
 export interface SetAgentStatusMsg {
@@ -79,7 +84,8 @@ export type BackgroundToContentMsg =
   | SetAgentStatusMsg
   | SearchAndClickMsg
   | NavigateMsg
-  | CheckRequiredMsg;
+  | CheckRequiredMsg
+  | ExecuteJsMsg;
 
 /* ================== content → background ================== */
 
@@ -112,6 +118,8 @@ export interface TranscriptMsg {
   procedure?: string;
   /** Для MARK_COMPLETED: опциональный короткий дневник. */
   diary?: string;
+  /** Для SELECT_DATE: номер дня или 'next'/'prev'. */
+  targetDay?: number | 'next' | 'prev';
 }
 
 export type ContentToBackgroundMsg =

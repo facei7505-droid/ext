@@ -2,35 +2,98 @@
 /**
  * Журнал выполнения процедур (Модуль 4 — тайм-менеджмент статусов).
  *
- * Врач/массажист отмечает процедуру как выполненную в момент/сразу после услуги
- * — агент автоматически фиксирует таймстамп и запрашивает короткий дневник.
+ * Источник данных — стор курса (courseStore): слоты генерируются на вкладке
+ * "Первичный осмотр" → SmartScheduleSection и автоматически попадают сюда.
  *
- * data-rpa-action="markCompleted:<procId>" — клик ставит галочку + timestamp.
- * data-rpa-field="service.<procId>.diary"  — поле короткого дневника.
+ * Врач/массажист отмечает процедуру как выполненную в момент/сразу после услуги
+ * — агент автоматически фиксирует реальный таймстамп и запрашивает дневник.
+ *
+ * Семантика data-rpa-*:
+ *  - data-rpa-action="markCompleted:<procedureId>" — клик ставит галочку +
+ *    timestamp. Если для одной процедуры несколько слотов в день — атрибут
+ *    висит ТОЛЬКО на первом невыполненном, чтобы голосовая команда
+ *    "Массаж выполнен" однозначно попала в правильный слот.
+ *  - data-rpa-field="service.<procedureId>.diary" — поле короткого дневника.
  */
-import { reactive, computed } from 'vue';
+import { computed, ref, watch } from 'vue';
+import { storeToRefs } from 'pinia';
+import { useCourseStore, slotKey, type Completion } from '@/stores/courseStore';
+import type { ScheduledSlot } from '@/scheduling/scheduler';
 
-interface ServiceRow {
-  id: string;
-  name: string;
-  specialist: string;
-  plannedTime: string;
-  completed: boolean;
-  completedAt: string;
-  diary: string;
-}
+const courseStore = useCourseStore();
+const { slots, dayDates, completions, totalSlots, totalCompleted } = storeToRefs(courseStore);
 
-const services = reactive<ServiceRow[]>([
-  { id: 'lfk',           name: 'ЛФК',          specialist: 'Иванов И.И.',    plannedTime: '09:00', completed: false, completedAt: '', diary: '' },
-  { id: 'massage',       name: 'Массаж',       specialist: 'Петров П.П.',    plannedTime: '09:30', completed: false, completedAt: '', diary: '' },
-  { id: 'psychology',    name: 'Психолог',     specialist: 'Сидорова А.А.',  plannedTime: '10:00', completed: false, completedAt: '', diary: '' },
-  { id: 'physiotherapy', name: 'Физиотерапия', specialist: 'Козлов В.В.',    plannedTime: '11:00', completed: false, completedAt: '', diary: '' },
-  { id: 'speech',        name: 'Логопед',      specialist: 'Никитина О.Л.',  plannedTime: '11:30', completed: false, completedAt: '', diary: '' },
-]);
+/** Дата, по которой сейчас отображается журнал. Дефолт: сегодня. */
+const today = (): string => new Date().toISOString().slice(0, 10);
+const selectedDate = ref<string>(today());
 
-const progress = computed(() => {
-  const done = services.filter((s) => s.completed).length;
-  return { done, total: services.length, ratio: services.length ? done / services.length : 0 };
+/**
+ * Если расписание сгенерировано, но выбранная дата в нём отсутствует —
+ * переключаемся на первый день курса. Это позволяет голосовой команде
+ * "Массаж выполнен" сразу попасть в нужный слот без ручного выбора даты.
+ */
+watch(
+  dayDates,
+  (days) => {
+    if (days.length === 0) return;
+    if (!days.some((d) => d.date === selectedDate.value)) {
+      selectedDate.value = days[0].date;
+    }
+  },
+  { immediate: true },
+);
+
+/** Фоллбэк-расписание (если врач ещё не сгенерировал курс). */
+const FALLBACK_SLOTS: ScheduledSlot[] = [
+  { day: 1, date: today(), dayOfWeek: new Date().getDay(), time: '09:00',
+    procedureId: 'lfk', procedureName: 'ЛФК',
+    specialistId: 'specialist1', specialistName: 'Иванов И.И.', duration: 30 },
+  { day: 1, date: today(), dayOfWeek: new Date().getDay(), time: '09:30',
+    procedureId: 'massage', procedureName: 'Массаж',
+    specialistId: 'specialist2', specialistName: 'Петров П.П.', duration: 30 },
+  { day: 1, date: today(), dayOfWeek: new Date().getDay(), time: '10:00',
+    procedureId: 'psychology', procedureName: 'Психолог',
+    specialistId: 'specialist3', specialistName: 'Сидорова А.А.', duration: 40 },
+  { day: 1, date: today(), dayOfWeek: new Date().getDay(), time: '11:00',
+    procedureId: 'physiotherapy', procedureName: 'Физиотерапия',
+    specialistId: 'specialist4', specialistName: 'Козлов В.В.', duration: 30 },
+  { day: 1, date: today(), dayOfWeek: new Date().getDay(), time: '11:30',
+    procedureId: 'speech', procedureName: 'Логопед',
+    specialistId: 'specialist5', specialistName: 'Никитина О.Л.', duration: 30 },
+];
+
+const hasGeneratedSchedule = computed(() => slots.value.length > 0);
+
+/** Слоты, отображаемые в таблице на выбранный день. */
+const visibleSlots = computed<ScheduledSlot[]>(() => {
+  if (!hasGeneratedSchedule.value) return FALLBACK_SLOTS;
+  return slots.value
+    .filter((s) => s.date === selectedDate.value)
+    .slice()
+    .sort((a, b) => a.time.localeCompare(b.time));
+});
+
+/**
+ * procedureId → ключ первого невыполненного слота на выбранный день.
+ * Голосовая команда вроде "Массаж выполнен" найдёт ровно один элемент
+ * с data-rpa-action="markCompleted:massage" (у остальных этого атрибута нет).
+ */
+const firstPendingKeyByProc = computed<Record<string, string>>(() => {
+  const map: Record<string, string> = {};
+  for (const s of visibleSlots.value) {
+    const k = slotKey(s);
+    if (completions.value[k]) continue;
+    if (!map[s.procedureId]) map[s.procedureId] = k;
+  }
+  return map;
+});
+
+const getCompletion = (s: ScheduledSlot): Completion | undefined =>
+  completions.value[slotKey(s)];
+
+const dayProgress = computed(() => {
+  const done = visibleSlots.value.filter((s) => !!getCompletion(s)).length;
+  return { done, total: visibleSlots.value.length };
 });
 
 const currentTime = (): string => {
@@ -38,99 +101,135 @@ const currentTime = (): string => {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 };
 
-/** Попросить расширение озвучить фразу. */
-const speak = (text: string) => {
+const speak = (text: string): void => {
   window.dispatchEvent(new CustomEvent('rpa:tts-request', { detail: { text } }));
   window.postMessage({ __rpa_tts: true, text }, '*');
 };
 
-const markCompleted = (row: ServiceRow) => {
-  if (row.completed) {
-    speak(`${row.name} уже отмечена как выполненная в ${row.completedAt}`);
+const toggle = (s: ScheduledSlot): void => {
+  const key = slotKey(s);
+  const existing = completions.value[key];
+  if (existing) {
+    courseStore.clearCompletion(key);
+    speak(`${s.procedureName} возвращена в статус "запланировано"`);
     return;
   }
-  row.completed = true;
-  row.completedAt = currentTime();
+  const at = currentTime();
+  courseStore.markCompleted(key, at, today(), '');
   speak(
-    `${row.name} отмечена как выполненная в ${row.completedAt}. ` +
+    `${s.procedureName} отмечена как выполненная в ${at}. ` +
       'Продиктуйте короткий дневник процедуры или скажите "пропусти".',
   );
 };
 
-const toggle = (row: ServiceRow) => {
-  if (row.completed) {
-    row.completed = false;
-    row.completedAt = '';
-    speak(`${row.name} возвращена в статус "запланировано"`);
+const updateDiary = (s: ScheduledSlot, text: string): void => {
+  const key = slotKey(s);
+  // Если процедура ещё не выполнена — создаём completion без времени (черновик)
+  if (!completions.value[key]) {
+    courseStore.markCompleted(key, '', today(), text);
   } else {
-    markCompleted(row);
+    courseStore.updateDiary(key, text);
   }
 };
+
+const weekdayName = (dow: number): string =>
+  ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'][dow] || '';
 </script>
 
 <template>
   <div class="service-execution" data-rpa-form="services">
     <div class="panel panel-default">
       <div class="panel-heading">
-        <h2>Журнал выполнения процедур</h2>
-        <div class="progress-summary">
-          Выполнено: <strong>{{ progress.done }} / {{ progress.total }}</strong>
+        <div>
+          <h2>Журнал выполнения процедур</h2>
+          <div class="subtitle">
+            Курс: <strong>{{ totalCompleted }} / {{ totalSlots || FALLBACK_SLOTS.length }}</strong>
+            выполнено ·
+            День: <strong>{{ dayProgress.done }} / {{ dayProgress.total }}</strong>
+          </div>
+        </div>
+        <div v-if="hasGeneratedSchedule" class="day-selector">
+          <label for="dayPick">Дата:</label>
+          <select
+            id="dayPick"
+            v-model="selectedDate"
+            class="form-control"
+            data-rpa-field="services.selectedDate"
+          >
+            <option
+              v-for="d in dayDates"
+              :key="d.date"
+              :value="d.date"
+              :data-rpa-action="`selectDate:day${d.day}`"
+            >
+              День {{ d.day }} · {{ weekdayName(d.dayOfWeek) }}, {{ d.date }}
+            </option>
+          </select>
         </div>
       </div>
 
       <div class="panel-body">
+        <div v-if="!hasGeneratedSchedule" class="no-schedule">
+          ⚠ Расписание ещё не сгенерировано — показан демо-набор.
+          Сгенерируйте курс на вкладке <strong>"Первичный осмотр"</strong> —
+          здесь автоматически появятся реальные процедуры.
+        </div>
+
         <table class="services-table">
           <thead>
             <tr>
               <th style="width:50px">#</th>
+              <th style="width:90px">План</th>
               <th>Процедура</th>
               <th>Специалист</th>
-              <th style="width:110px">План</th>
               <th style="width:130px">Статус</th>
-              <th style="width:110px">Выполнено</th>
+              <th style="width:90px">Факт</th>
               <th>Дневник процедуры</th>
             </tr>
           </thead>
           <tbody>
+            <tr v-if="visibleSlots.length === 0">
+              <td colspan="7" class="empty-row">
+                На выбранную дату нет процедур.
+              </td>
+            </tr>
             <tr
-              v-for="(row, idx) in services"
-              :key="row.id"
-              :class="{ 'row-done': row.completed }"
+              v-for="(s, idx) in visibleSlots"
+              :key="slotKey(s)"
+              :class="{ 'row-done': !!getCompletion(s) }"
             >
               <td>{{ idx + 1 }}</td>
-              <td class="proc-name">{{ row.name }}</td>
-              <td>{{ row.specialist }}</td>
-              <td>{{ row.plannedTime }}</td>
+              <td class="time-col">{{ s.time }}</td>
+              <td class="proc-name">{{ s.procedureName }}</td>
+              <td>{{ s.specialistName }}</td>
               <td>
                 <button
                   type="button"
                   class="btn-status"
-                  :class="row.completed ? 'btn-done' : 'btn-pending'"
-                  :data-rpa-action="`markCompleted:${row.id}`"
-                  :data-rpa-field="`service.${row.id}.completed`"
-                  @click="toggle(row)"
+                  :class="getCompletion(s) ? 'btn-done' : 'btn-pending'"
+                  :data-rpa-action="
+                    firstPendingKeyByProc[s.procedureId] === slotKey(s)
+                      ? `markCompleted:${s.procedureId}`
+                      : undefined
+                  "
+                  :data-rpa-field="`service.${s.procedureId}.completed`"
+                  @click="toggle(s)"
                 >
-                  <span v-if="row.completed">✓ Выполнено</span>
+                  <span v-if="getCompletion(s)">✓ Выполнено</span>
                   <span v-else>☐ Запланировано</span>
                 </button>
               </td>
-              <td>
-                <input
-                  type="text"
-                  class="form-control time-cell"
-                  v-model="row.completedAt"
-                  placeholder="--:--"
-                  :data-rpa-field="`service.${row.id}.timestamp`"
-                  readonly
-                />
+              <td class="time-col fact-col">
+                {{ getCompletion(s)?.completedAt || '—' }}
               </td>
               <td>
                 <textarea
-                  v-model="row.diary"
+                  :value="getCompletion(s)?.diary || ''"
+                  @input="updateDiary(s, ($event.target as HTMLTextAreaElement).value)"
                   class="form-control diary-cell"
                   rows="2"
                   placeholder="Запишите результат процедуры голосом"
-                  :data-rpa-field="`service.${row.id}.diary`"
+                  :data-rpa-field="`service.${s.procedureId}.diary`"
                 ></textarea>
               </td>
             </tr>
@@ -162,10 +261,11 @@ const toggle = (row: ServiceRow) => {
 .panel-heading {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   padding: 14px 18px;
   border-bottom: 1px solid #e0e4ea;
   background: #f8f9fa;
+  gap: 16px;
 }
 
 .panel-heading h2 {
@@ -174,17 +274,48 @@ const toggle = (row: ServiceRow) => {
   color: #2c3e50;
 }
 
-.progress-summary {
-  font-size: 14px;
+.subtitle {
+  margin-top: 4px;
+  font-size: 13px;
   color: #555;
 }
 
-.progress-summary strong {
+.subtitle strong {
   color: #0b5394;
+}
+
+.day-selector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.day-selector label {
+  font-size: 13px;
+  color: #555;
+  white-space: nowrap;
+}
+
+.day-selector select {
+  padding: 6px 10px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 13px;
+  min-width: 240px;
 }
 
 .panel-body {
   padding: 16px 18px;
+}
+
+.no-schedule {
+  padding: 10px 14px;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  color: #713f12;
+  border-radius: 4px;
+  margin-bottom: 14px;
+  font-size: 13px;
 }
 
 .services-table {
@@ -212,9 +343,27 @@ const toggle = (row: ServiceRow) => {
   background: #f0fdf4;
 }
 
+.empty-row {
+  text-align: center;
+  color: #999;
+  padding: 24px 0;
+  font-style: italic;
+}
+
 .proc-name {
   font-weight: 600;
   color: #1f2937;
+}
+
+.time-col {
+  font-family: 'Courier New', monospace;
+  font-weight: 600;
+  color: #3098a1;
+  text-align: center;
+}
+
+.fact-col {
+  color: #16a34a;
 }
 
 .btn-status {
@@ -248,17 +397,6 @@ const toggle = (row: ServiceRow) => {
   background: #15803d;
 }
 
-.time-cell {
-  width: 100%;
-  padding: 6px 8px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  font-size: 13px;
-  text-align: center;
-  font-family: 'Courier New', monospace;
-  font-weight: 600;
-}
-
 .diary-cell {
   width: 100%;
   padding: 6px 8px;
@@ -269,8 +407,7 @@ const toggle = (row: ServiceRow) => {
   font-family: inherit;
 }
 
-.diary-cell:focus,
-.time-cell:focus {
+.diary-cell:focus {
   border-color: #3098a1;
   outline: none;
   box-shadow: 0 0 0 2px rgba(48, 152, 161, 0.15);
