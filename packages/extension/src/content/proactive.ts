@@ -47,7 +47,11 @@ export function initProactive(cb: ProactiveCallbacks = {}): ProactiveHandle {
     widget.setHasPendingInterim(text.trim().length > 0);
   });
 
+<<<<<<< Updated upstream
   // Финальные транскрипты — вверх для LLM. Скрываем кнопку "Отправить".
+=======
+  // Финальные транскрипты — вверх для LLM.
+>>>>>>> Stashed changes
   voice.on('transcript', (parsed) => {
     widget.setTranscript(parsed.raw);
     widget.setHasPendingInterim(false);
@@ -59,6 +63,7 @@ export function initProactive(cb: ProactiveCallbacks = {}): ProactiveHandle {
     widget.setHasPendingInterim(false);
   });
 
+<<<<<<< Updated upstream
   // Кнопка "Отправить" — вручную коммитим накопленный текст как финальный.
   widget.onSendClick(() => {
     voice.flushInterim();
@@ -74,6 +79,13 @@ export function initProactive(cb: ProactiveCallbacks = {}): ProactiveHandle {
       widget.setTranscript('');
     } else if (s === 'listening' || s === 'speaking' || s === 'thinking' || s === 'filling') {
       voice.stopManually();
+=======
+  // Переключение микрофона: любой активный режим → полный стоп; иначе — старт.
+  widget.onMicClick(() => {
+    const s = voice.status;
+    if (s === 'listening' || s === 'speaking' || s === 'thinking' || s === 'filling') {
+      voice.cancelAll();
+>>>>>>> Stashed changes
       widget.setTranscript('');
     } else {
       voice.startListening();

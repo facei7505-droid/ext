@@ -51,11 +51,14 @@ export interface NavigateMsg {
   target: string;
 }
 
+<<<<<<< Updated upstream
 export interface CheckRequiredMsg {
   type: 'rpa:checkRequired';
   form: RpaFormKey;
 }
 
+=======
+>>>>>>> Stashed changes
 export type AgentVisualStatus = 'idle' | 'listening' | 'thinking' | 'filling' | 'speaking';
 
 export interface SetAgentStatusMsg {
@@ -78,8 +81,12 @@ export type BackgroundToContentMsg =
   | SpeakMsg
   | SetAgentStatusMsg
   | SearchAndClickMsg
+<<<<<<< Updated upstream
   | NavigateMsg
   | CheckRequiredMsg;
+=======
+  | NavigateMsg;
+>>>>>>> Stashed changes
 
 /* ================== content → background ================== */
 
@@ -108,10 +115,13 @@ export interface TranscriptMsg {
   url?: string;
   /** Для MULTI_EDIT: массив команд */
   commands?: TranscriptMsg[];
+<<<<<<< Updated upstream
   /** Для MARK_COMPLETED: идентификатор процедуры. */
   procedure?: string;
   /** Для MARK_COMPLETED: опциональный короткий дневник. */
   diary?: string;
+=======
+>>>>>>> Stashed changes
 }
 
 export type ContentToBackgroundMsg =

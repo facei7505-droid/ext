@@ -12,7 +12,11 @@
  * Все команды (заполни, сохрани, очисти) обрабатываются через LLM.
  */
 
+<<<<<<< Updated upstream
 export type Intent = 'DICTATION' | 'CONFIRM' | 'CANCEL' | 'EDIT_FIELD' | 'DELETE_FIELD' | 'ADD_FIELD' | 'CLEAR_ALL' | 'SHOW_FIELDS' | 'HELP' | 'REPEAT' | 'SAVE' | 'NAVIGATE' | 'OPEN_TAB' | 'MULTI_EDIT' | 'GENERATE_SCHEDULE' | 'MARK_COMPLETED';
+=======
+export type Intent = 'DICTATION' | 'CONFIRM' | 'CANCEL' | 'EDIT_FIELD' | 'DELETE_FIELD' | 'ADD_FIELD' | 'CLEAR_ALL' | 'SHOW_FIELDS' | 'HELP' | 'REPEAT' | 'SAVE' | 'NAVIGATE' | 'OPEN_TAB' | 'MULTI_EDIT';
+>>>>>>> Stashed changes
 
 export interface ParsedIntent {
   intent: Intent;
@@ -32,10 +36,13 @@ export interface ParsedIntent {
   url?: string;
   /** Для нескольких команд: массив команд */
   commands?: ParsedIntent[];
+<<<<<<< Updated upstream
   /** Для MARK_COMPLETED: идентификатор процедуры (lfk, massage, psychology…) */
   procedure?: string;
   /** Для MARK_COMPLETED: опциональный короткий дневник процедуры */
   diary?: string;
+=======
+>>>>>>> Stashed changes
 }
 
 const CONFIRM_KEYWORDS = [
@@ -108,9 +115,17 @@ const FIELD_NAME_MAP: Record<string, string> = {
   'температуру': 'visit.temperature',
   'температура тела': 'visit.temperature',
   'температур': 'visit.temperature',
+<<<<<<< Updated upstream
   'назначения врача': 'visit.recommendations',
   'рекомендации': 'visit.recommendations',
   'лечение': 'visit.recommendations',
+=======
+  'назначения': 'visit.recommendations',
+  'назначения врача': 'visit.recommendations',
+  'рекомендации': 'visit.recommendations',
+  'лечение': 'visit.recommendations',
+  'лекарства': 'visit.recommendations',
+>>>>>>> Stashed changes
   'терапия': 'visit.recommendations',
   // Выписной эпикриз (EpicrisisDamumed) - используется префикс epicrisis
   'окончательный диагноз': 'epicrisis.finalDiagnosis',
@@ -251,15 +266,21 @@ const TAB_NAME_MAP: Record<string, string> = {
   'диагностика': 'diagnoses',
   // Назначения
   'назначения': 'assignments',
+<<<<<<< Updated upstream
   'назначение': 'assignments',
   'лекарства': 'assignments',
   'лекарство': 'assignments',
   'медикаменты': 'assignments',
   'медикамент': 'assignments',
+=======
+  'лекарства': 'assignments',
+  'медикаменты': 'assignments',
+>>>>>>> Stashed changes
   'терапия': 'assignments',
   // Расписание
   'расписание': 'schedule',
   'график': 'schedule',
+<<<<<<< Updated upstream
   // Журнал выполнения процедур
   'журнал процедур': 'services',
   'журнал': 'services',
@@ -532,6 +553,189 @@ export function parseIntent(transcript: string): ParsedIntent | ParsedIntent[] {
   const navMatch = text.match(/(?:открой|перейди к|перейди в|перейти к|перейти в|покажи|переключись на|зайди в)\s+(.+)/i);
   if (navMatch && navMatch[1]) {
     const targetText = navMatch[1].toLowerCase().trim();
+=======
+  'процедуры': 'schedule',
+  'процедур': 'schedule',
+};
+
+/** Нормализует русское название поля на английское имя поля формы. */
+function normalizeFieldName(fieldName: string): string {
+  const normalized = fieldName.toLowerCase().trim();
+  return FIELD_NAME_MAP[normalized] || fieldName;
+}
+
+/** Парсит несколько команд из одной транскрипции */
+function parseMultipleCommands(text: string, originalTranscript: string): ParsedIntent[] {
+  const commands: ParsedIntent[] = [];
+
+  // Нормализуем текст: заменяем ё на е для согласования
+  const normalizedText = text.replace(/ё/g, 'е');
+  const normalizedOriginal = originalTranscript.replace(/ё/g, 'е');
+
+  // Сортируем ключи FIELD_NAME_MAP по длине (сначала длинные, чтобы "дата поступления" было до "дата")
+  const sortedFieldNames = Object.keys(FIELD_NAME_MAP).sort((a, b) => b.length - a.length);
+
+  // Находим все позиции полей в тексте
+  const fieldMatches: { fieldName: string; index: number; field: string }[] = [];
+  for (const fieldName of sortedFieldNames) {
+    const normalizedFieldName = fieldName.replace(/ё/g, 'е');
+    let searchIndex = 0;
+    while (true) {
+      const fieldIndex = normalizedText.indexOf(normalizedFieldName + ' ', searchIndex);
+      if (fieldIndex === -1) break;
+      fieldMatches.push({
+        fieldName,
+        index: fieldIndex,
+        field: FIELD_NAME_MAP[fieldName],
+      });
+      searchIndex = fieldIndex + 1;
+    }
+  }
+
+  // Сортируем найденные поля по позиции, затем по длине названия (сначала длинные)
+  fieldMatches.sort((a, b) => {
+    if (a.index !== b.index) return a.index - b.index;
+    return b.fieldName.length - a.fieldName.length;
+  });
+
+  // Фильтруем короткие названия полей которые являются подстроками длинных на той же позиции
+  const filteredMatches: typeof fieldMatches = [];
+  for (let i = 0; i < fieldMatches.length; i++) {
+    const current = fieldMatches[i];
+    let isSubsequence = false;
+
+    // Проверяем, есть ли более длинное поле на той же позиции, которое содержит текущее
+    for (let j = 0; j < fieldMatches.length; j++) {
+      if (i !== j && fieldMatches[j].index === current.index && fieldMatches[j].fieldName.length > current.fieldName.length) {
+        if (fieldMatches[j].fieldName.includes(current.fieldName)) {
+          isSubsequence = true;
+          console.log('[intentParser] Filtering out subsequence:', current.fieldName, 'covered by', fieldMatches[j].fieldName);
+          break;
+        }
+      }
+    }
+
+    // Дополнительная проверка: если текущее поле начинается в середине другого поля, фильтруем его
+    for (let j = 0; j < fieldMatches.length; j++) {
+      if (i !== j && current.index > fieldMatches[j].index && current.index < fieldMatches[j].index + fieldMatches[j].fieldName.length) {
+        isSubsequence = true;
+        console.log('[intentParser] Filtering out overlapping:', current.fieldName, 'overlaps with', fieldMatches[j].fieldName);
+        break;
+      }
+    }
+
+    // Проверяем, если текущее слово является частью более длинной фразы (например, "диагноз" в "окончательный диагноз")
+    for (let j = 0; j < fieldMatches.length; j++) {
+      if (i !== j && current.index > fieldMatches[j].index && current.index < fieldMatches[j].index + fieldMatches[j].fieldName.length + 1) {
+        // Проверяем, что текущее слово начинается после пробела в длинной фразе
+        const longerPhrase = text.slice(fieldMatches[j].index, fieldMatches[j].index + fieldMatches[j].fieldName.length);
+        if (longerPhrase.includes(' ' + current.fieldName) || longerPhrase.endsWith(current.fieldName)) {
+          isSubsequence = true;
+          console.log('[intentParser] Filtering out word in phrase:', current.fieldName, 'part of', fieldMatches[j].fieldName);
+          break;
+        }
+      }
+    }
+
+    if (!isSubsequence) {
+      filteredMatches.push(current);
+    }
+  }
+
+  console.log('[intentParser] Filtered field matches:', filteredMatches.map(m => ({ fieldName: m.fieldName, field: m.field })));
+
+  // Извлекаем значения для каждого поля
+  for (let i = 0; i < filteredMatches.length; i++) {
+    const match = filteredMatches[i];
+    const nextMatch = filteredMatches[i + 1];
+
+    const normalizedFieldName = match.fieldName.replace(/ё/g, 'е');
+    const afterFieldStart = match.index + normalizedFieldName.length + 1;
+    const nextFieldIndex = nextMatch ? nextMatch.index : normalizedText.length;
+
+    const valueText = normalizedText.slice(afterFieldStart, nextFieldIndex).trim();
+    const originalValueText = normalizedOriginal.slice(afterFieldStart, nextFieldIndex).trim();
+
+    console.log('[intentParser] Extracting value for:', match.fieldName, 'from index', afterFieldStart, 'to', nextFieldIndex, 'value:', valueText);
+
+    if (valueText) {
+      // Удаляем пробелы если значение состоит только из цифр
+      const isNumericOnly = /^\d+(\s+\d+)*$/.test(valueText);
+      const value = isNumericOnly ? valueText.replace(/\s+/g, '') : valueText;
+
+      // Для ИИН полей извлекаем только числа
+      let finalValue = value;
+      if (match.field === 'patient.iin') {
+        const numbers = value.match(/\d+(\s+\d+)*/g);
+        if (numbers) {
+          finalValue = numbers.join(' ').replace(/\s+/g, '');
+        }
+      }
+
+      console.log('[intentParser] Extracted field:', { fieldName: match.fieldName, field: match.field, value: finalValue });
+
+      commands.push({
+        intent: 'EDIT_FIELD',
+        raw: originalValueText,
+        confidence: 0.7,
+        field: match.field,
+        value: finalValue,
+      });
+    }
+  }
+
+  // Удаляем дубликаты полей (оставляем последнее совпадение)
+  const uniqueCommands: ParsedIntent[] = [];
+  const seenFields = new Set<string>();
+  for (let i = commands.length - 1; i >= 0; i--) {
+    const field = commands[i].field;
+    if (field && !seenFields.has(field)) {
+      seenFields.add(field);
+      uniqueCommands.unshift(commands[i]);
+    } else if (field) {
+      console.log('[intentParser] Skipping duplicate field:', field);
+    }
+  }
+
+  console.log('[intentParser] Final commands after deduplication:', uniqueCommands.map(c => ({ field: c.field, value: c.value })));
+  return uniqueCommands;
+}
+
+export function parseIntent(transcript: string): ParsedIntent | ParsedIntent[] {
+  const text = transcript.toLowerCase().trim();
+  console.log('[intentParser] Parsing transcript:', text);
+
+  for (const kw of CONFIRM_KEYWORDS) {
+    if (text === kw || text.startsWith(kw + ' ') || text.endsWith(' ' + kw)) {
+      console.log('[intentParser] Matched CONFIRM keyword:', kw);
+      return { intent: 'CONFIRM', raw: transcript, confidence: 0.9 };
+    }
+  }
+
+  for (const kw of CANCEL_KEYWORDS) {
+    if (text === kw || text.startsWith(kw + ' ') || text.endsWith(' ' + kw)) {
+      console.log('[intentParser] Matched CANCEL keyword:', kw);
+      return { intent: 'CANCEL', raw: transcript, confidence: 0.9 };
+    }
+  }
+
+  // Проверяем на несколько команд (несколько полей в одной транскрипции)
+  const multiCommands = parseMultipleCommands(text, transcript);
+  if (multiCommands.length > 1) {
+    console.log('[intentParser] Detected multiple commands:', multiCommands.length);
+    return {
+      intent: 'MULTI_EDIT',
+      raw: transcript,
+      confidence: 0.7,
+      commands: multiCommands,
+    };
+  }
+
+  // Парсинг навигационных команд
+  const navMatch = text.match(/(?:открой|перейди к|перейди в|перейти к|перейти в|покажи|переключись на|зайди в)\s+(.+)/i);
+  if (navMatch) {
+    const targetText = navMatch[2].toLowerCase().trim();
+>>>>>>> Stashed changes
     const normalizedTarget = targetText.replace(/ё/g, 'е');
 
     // Ищем соответствие в маппинге вкладок

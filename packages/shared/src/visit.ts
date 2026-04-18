@@ -89,7 +89,7 @@ export interface LlmRequestInput {
   /** Сырой транскрипт Web Speech API. */
   transcript: string;
   /** Доп. контекст (напр. ФИО из карточки). */
-  hints?: Partial<StructuredPatient>;
+  hints?: Record<string, unknown>;
 }
 
 export interface LlmClientConfig {

@@ -21,3 +21,6 @@ dist-ssr/
 *.log
 coverage/
 .cache/
+
+# Vite build cache (автоматически создается при build/dev, не нужен в репо)
+vite.config.ts.timestamp-*.mjs

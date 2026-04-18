@@ -80,6 +80,7 @@ const WIDGET_STYLES = /* css */ `
     color: #fff;
   }
   .mic[data-status="listening"]:hover { background: #b91c1c; }
+<<<<<<< Updated upstream
 
   /* Кнопка отправки — показывается только когда есть накопленный текст */
   .send-btn {
@@ -99,6 +100,8 @@ const WIDGET_STYLES = /* css */ `
   .send-btn:active { transform: scale(0.96); }
   .shell[data-has-pending="true"] .send-btn { display: grid; }
   .icon-send { width: 18px; height: 18px; fill: currentColor; }
+=======
+>>>>>>> Stashed changes
 
   /* Пульсация во время прослушивания */
   .mic[data-status="listening"]::before,

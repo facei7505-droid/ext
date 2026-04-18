@@ -27,6 +27,7 @@ export type FsmState =
   | 'LISTENING'
   | 'PROCESSING_LLM'
   | 'FILLING_DOM';
+<<<<<<< Updated upstream
 
 /** Маппинг внутренних ключей полей на человеческие названия для озвучки. */
 const FIELD_LABELS: Record<string, string> = {
@@ -75,6 +76,8 @@ function fieldLabel(field: string): string {
   const parts = field.split('.');
   return parts[parts.length - 1] || field;
 }
+=======
+>>>>>>> Stashed changes
 
 const STATE_KEY = 'rpa.fsm.state';
 const LOG_KEY = 'rpa.fsm.log';
@@ -148,6 +151,7 @@ export class Orchestrator {
     // CONFIRM и CANCEL обрабатываются локально в content script (askConfirmation)
     if (msg.intent === 'CONFIRM' || msg.intent === 'CANCEL') {
       return { ok: true };
+<<<<<<< Updated upstream
     }
 
     // Команды редактирования
@@ -199,6 +203,51 @@ export class Orchestrator {
 
     if (msg.intent === 'MARK_COMPLETED' && msg.procedure) {
       return this.handleMarkCompleted(msg.procedure, msg.diary);
+=======
+    }
+
+    // Команды редактирования
+    if (msg.intent === 'EDIT_FIELD' && msg.field && msg.value) {
+      console.log('[orchestrator] Processing EDIT_FIELD:', { field: msg.field, value: msg.value });
+      return this.handleEditField(msg.field, msg.value);
+    }
+
+    if (msg.intent === 'DELETE_FIELD' && msg.deleteField) {
+      return this.handleDeleteField(msg.deleteField);
+    }
+
+    if (msg.intent === 'ADD_FIELD' && msg.addField && msg.addValue) {
+      return this.handleAddField(msg.addField, msg.addValue);
+    }
+
+    if (msg.intent === 'CLEAR_ALL') {
+      return this.handleClearAll();
+    }
+
+    if (msg.intent === 'SHOW_FIELDS') {
+      return this.handleShowFields();
+    }
+
+    if (msg.intent === 'HELP') {
+      return this.handleHelp();
+    }
+
+    if (msg.intent === 'REPEAT') {
+      return this.handleRepeat();
+    }
+
+    // Новые команды для сохранения и навигации
+    if (msg.intent === 'SAVE') {
+      return this.handleSave();
+    }
+
+    if (msg.intent === 'NAVIGATE' && msg.target) {
+      return this.handleNavigate(msg.target);
+    }
+
+    if (msg.intent === 'OPEN_TAB' && msg.url) {
+      return this.handleOpenTab(msg.url);
+>>>>>>> Stashed changes
     }
 
     // MULTI_EDIT → обрабатываем несколько команд последовательно
@@ -226,8 +275,15 @@ export class Orchestrator {
         form = 'diary';
       } else if (field.startsWith('diagnoses.')) {
         form = 'diagnoses';
+<<<<<<< Updated upstream
       } else if (field.startsWith('assignments.') || field.startsWith('schedule.')) {
         form = 'assignments';
+=======
+      } else if (field.startsWith('assignments.')) {
+        form = 'assignments';
+      } else if (field.startsWith('schedule.')) {
+        form = 'schedule';
+>>>>>>> Stashed changes
       }
 
       const r = await this.deps.sendToTab({
@@ -237,10 +293,16 @@ export class Orchestrator {
         value,
         humanTyping: false,
       });
+<<<<<<< Updated upstream
       const label = fieldLabel(field);
       await this.deps.sendToTab({
         type: 'rpa:speak',
         text: r.ok ? `${label}: ${value}` : `Ошибка изменения поля ${label}`,
+=======
+      await this.deps.sendToTab({
+        type: 'rpa:speak',
+        text: r.ok ? `Поле ${field} изменено на ${value}` : `Ошибка изменения поля ${field}`,
+>>>>>>> Stashed changes
       }).catch(() => {});
 
       // Проверяем, нужно ли предложить следующий шаг
@@ -257,6 +319,7 @@ export class Orchestrator {
 
   /** Проверяет состояние формы и предлагает следующий шаг если нужно */
   private async checkAndSuggestNextStep(form: RpaFormKey): Promise<void> {
+<<<<<<< Updated upstream
     await new Promise(resolve => setTimeout(resolve, 1000));
 
     // Проверяем обязательные поля — content script вернёт список незаполненных
@@ -280,17 +343,29 @@ export class Orchestrator {
     }
 
     // Все обязательные поля заполнены — предлагаем следующий шаг
+=======
+    // Определяем предложения для каждой формы
+>>>>>>> Stashed changes
     const suggestions: Record<RpaFormKey, string> = {
       'intake': 'Первичный осмотр заполнен. Сформировать расписание процедур для пациента?',
       'epicrisis': 'Выписной эпикриз заполнен. Сохранить данные пациента?',
       'diary': 'Дневниковая запись сохранена. Перейти к назначениям?',
       'diagnoses': 'Диагноз добавлен. Добавить сопутствующие диагнозы?',
       'assignments': 'Назначение добавлено. Добавить еще назначения?',
+<<<<<<< Updated upstream
       'services': 'Журнал процедур обновлён.',
+=======
+      'schedule': 'Расписание готово. Сохранить расписание процедур?',
+>>>>>>> Stashed changes
     };
 
     const suggestion = suggestions[form];
     if (suggestion) {
+<<<<<<< Updated upstream
+=======
+      // Задержка перед предложением
+      await new Promise(resolve => setTimeout(resolve, 1000));
+>>>>>>> Stashed changes
       await this.deps.sendToTab({
         type: 'rpa:speak',
         text: suggestion,
@@ -304,15 +379,25 @@ export class Orchestrator {
       await this.setState('FILLING_DOM', `Удаление поля: ${field}`);
       const r = await this.deps.sendToTab({
         type: 'rpa:fillField',
+<<<<<<< Updated upstream
         form: 'intake',
+=======
+        form: this.resolveFormByField(field),
+>>>>>>> Stashed changes
         field,
         value: '',
         humanTyping: false,
       });
+<<<<<<< Updated upstream
       const label = fieldLabel(field);
       await this.deps.sendToTab({
         type: 'rpa:speak',
         text: r.ok ? `Поле ${label} очищено` : `Ошибка очистки поля ${label}`,
+=======
+      await this.deps.sendToTab({
+        type: 'rpa:speak',
+        text: r.ok ? `Поле ${field} очищено` : `Ошибка очистки поля ${field}`,
+>>>>>>> Stashed changes
       }).catch(() => {});
       return r;
     } finally {
@@ -325,15 +410,25 @@ export class Orchestrator {
       await this.setState('FILLING_DOM', `Добавление в поле: ${field}`);
       const r = await this.deps.sendToTab({
         type: 'rpa:fillField',
+<<<<<<< Updated upstream
         form: 'intake',
+=======
+        form: this.resolveFormByField(field),
+>>>>>>> Stashed changes
         field,
         value,
         humanTyping: false,
       });
+<<<<<<< Updated upstream
       const label = fieldLabel(field);
       await this.deps.sendToTab({
         type: 'rpa:speak',
         text: r.ok ? `Добавлено в поле ${label}: ${value}` : `Ошибка добавления в поле ${label}`,
+=======
+      await this.deps.sendToTab({
+        type: 'rpa:speak',
+        text: r.ok ? `Добавлено в поле ${field}: ${value}` : `Ошибка добавления в поле ${field}`,
+>>>>>>> Stashed changes
       }).catch(() => {});
       return r;
     } finally {
@@ -394,18 +489,25 @@ export class Orchestrator {
       type: 'rpa:navigate',
       target,
     });
+<<<<<<< Updated upstream
     const label = (r.ok && r.data && typeof (r.data as { label?: string }).label === 'string')
       ? (r.data as { label: string }).label
       : target;
     await this.deps.sendToTab({
       type: 'rpa:speak',
       text: r.ok ? `Переход на ${label} выполнен` : `Ошибка перехода на ${target}`,
+=======
+    await this.deps.sendToTab({
+      type: 'rpa:speak',
+      text: r.ok ? `Переход на ${target} выполнен` : `Ошибка перехода на ${target}`,
+>>>>>>> Stashed changes
       silentAfter: true,
     }).catch(() => {});
     await this.setState('IDLE');
     return r;
   }
 
+<<<<<<< Updated upstream
   private async handleGenerateSchedule(): Promise<RpaResult> {
     await this.setState('FILLING_DOM', 'Генерация расписания');
     // Умное расписание встроено в первичный осмотр — убеждаемся что мы там
@@ -504,6 +606,8 @@ export class Orchestrator {
     return { ok: true };
   }
 
+=======
+>>>>>>> Stashed changes
   private async handleOpenTab(url: string): Promise<RpaResult> {
     await this.setState('IDLE');
     await this.deps.sendToTab({
@@ -532,6 +636,18 @@ export class Orchestrator {
       text: `Заполнено ${filled} из ${commands.length} полей`,
     }).catch(() => {});
     return { ok: true, data: { filled, failed } };
+<<<<<<< Updated upstream
+=======
+  }
+
+  private resolveFormByField(field: string): RpaFormKey {
+    if (field.startsWith('epicrisis.')) return 'epicrisis';
+    if (field.startsWith('diary.')) return 'diary';
+    if (field.startsWith('diagnoses.')) return 'diagnoses';
+    if (field.startsWith('assignments.')) return 'assignments';
+    if (field.startsWith('schedule.')) return 'schedule';
+    return 'intake';
+>>>>>>> Stashed changes
   }
 
   /* ──────────────────────── Внутренние flow ──────────────────────── */

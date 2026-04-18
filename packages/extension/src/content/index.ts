@@ -354,8 +354,11 @@ const proactive = initProactive({
       addValue: parsed.addValue,
       target: parsed.target,
       url: parsed.url,
+<<<<<<< Updated upstream
       procedure: parsed.procedure,
       diary: parsed.diary,
+=======
+>>>>>>> Stashed changes
       commands: parsed.commands?.map(cmd => ({
         type: 'rpa:transcript',
         transcript: cmd.raw,
@@ -367,6 +370,7 @@ const proactive = initProactive({
     };
     chrome.runtime.sendMessage(msg).catch(() => { /* background asleep */ });
   },
+<<<<<<< Updated upstream
 });
 
 // Мост страница→TTS: страница может отправить запрос на озвучку двумя способами:
@@ -400,6 +404,8 @@ window.addEventListener('message', (ev) => {
   const data = ev.data as { __rpa_tts?: boolean; text?: string } | null;
   if (!data || !data.__rpa_tts) return;
   ttsSpeak(data.text);
+=======
+>>>>>>> Stashed changes
 });
 
 /* -------------------- команды -------------------- */
@@ -420,6 +426,7 @@ chrome.runtime.onMessage.addListener(
   },
 );
 
+<<<<<<< Updated upstream
 /** Рисует красную звёздочку в верхнем углу элемента (для обязательных полей). */
 function markFieldAsRequired(el: HTMLElement): void {
   const parent = el.parentElement;
@@ -509,6 +516,8 @@ const requiredMarksObserver = new MutationObserver(() => {
 });
 requiredMarksObserver.observe(document.body, { childList: true, subtree: true });
 
+=======
+>>>>>>> Stashed changes
 /** Обработка навигации по вкладкам */
 async function handleNavigation(target: string): Promise<RpaResult> {
   console.log('[rpa] handleNavigation:', target);
@@ -520,8 +529,12 @@ async function handleNavigation(target: string): Promise<RpaResult> {
     'diary': ['дневниковая запись', 'дневник', 'запись'],
     'diagnoses': ['диагнозы', 'диагностика'],
     'assignments': ['назначения', 'лекарства', 'медикаменты'],
+<<<<<<< Updated upstream
     'schedule': ['умное расписание', 'расписание', 'график'],
     'services': ['журнал процедур', 'журнал', 'выполнение', 'журнал услуг'],
+=======
+    'schedule': ['расписание', 'график', 'процедуры'],
+>>>>>>> Stashed changes
   };
 
   const searchTerms = tabTextMap[target] || [target];
@@ -535,9 +548,14 @@ async function handleNavigation(target: string): Promise<RpaResult> {
     if (elements.length > 0) {
       const element = elements[0];
       console.log('[rpa] Found tab element:', element, 'for term:', term);
+<<<<<<< Updated upstream
       const tabLabel = (element.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 80);
       (element as HTMLElement).click();
       return { ok: true, data: { label: tabLabel } };
+=======
+      (element as HTMLElement).click();
+      return { ok: true };
+>>>>>>> Stashed changes
     }
   }
 
@@ -545,9 +563,14 @@ async function handleNavigation(target: string): Promise<RpaResult> {
   const routeElement = document.querySelector(`[data-rpa-route="${target}"]`);
   if (routeElement) {
     console.log('[rpa] Found element by data-rpa-route:', routeElement);
+<<<<<<< Updated upstream
     const tabLabel = (routeElement.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 80);
     (routeElement as HTMLElement).click();
     return { ok: true, data: { label: tabLabel } };
+=======
+    (routeElement as HTMLElement).click();
+    return { ok: true };
+>>>>>>> Stashed changes
   }
 
   return {
@@ -667,6 +690,7 @@ async function handleCommand(msg: BackgroundToContentMsg): Promise<RpaResult> {
       };
     }
 
+<<<<<<< Updated upstream
     case 'rpa:checkRequired': {
       const required = REQUIRED_BY_FORM[msg.form] || [];
       const missing: string[] = [];
@@ -680,6 +704,8 @@ async function handleCommand(msg: BackgroundToContentMsg): Promise<RpaResult> {
       return { ok: true, data: { missing } };
     }
 
+=======
+>>>>>>> Stashed changes
     default: {
       const exhaustive: never = msg;
       return { ok: false, error: `unknown message: ${JSON.stringify(exhaustive)}`, code: 'BAD_ARG' };
